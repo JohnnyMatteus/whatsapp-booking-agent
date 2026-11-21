@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "id": "01JNY00000000000000BOOKING1", "session_id": "01JNX0000000000000000HATHA", "status": "confirmed", "queued_at": "2026-03-01T14:03:11.204518Z", "confirmed_at": "2026-03-01T14:03:11Z", "canceled_at": null },
+    { "id": "01JNY00000000000000BOOKING2", "session_id": "01JNX000000000000000PILATES", "status": "canceled", "queued_at": "2026-02-27T09:00:00.000000Z", "confirmed_at": null, "canceled_at": "2026-02-28T09:00:00Z" }
+  ],
+  "links": { "first": "http://saas.local/api/v1/me/bookings?page=1", "last": "http://saas.local/api/v1/me/bookings?page=1", "prev": null, "next": null },
+  "meta": { "current_page": 1, "from": 1, "last_page": 1, "path": "http://saas.local/api/v1/me/bookings", "per_page": 50, "to": 2, "total": 2 }
+}

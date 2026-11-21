@@ -1,0 +1,6 @@
+{
+  "data": {
+    "canceled": { "id": "01JNY00000000000000BOOKING1", "session_id": "01JNX0000000000000000HATHA", "status": "canceled", "queued_at": "2026-03-01T14:03:11.204518Z", "confirmed_at": "2026-03-01T14:03:11Z", "canceled_at": "2026-03-02T12:00:00Z" },
+    "promoted": { "id": "01JNY00000000000000BOOKING9", "session_id": "01JNX0000000000000000HATHA", "status": "confirmed", "queued_at": "2026-03-01T15:00:00.000000Z", "confirmed_at": "2026-03-02T12:00:00Z", "canceled_at": null }
+  }
+}
