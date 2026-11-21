@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  - services/whatsapp-gateway
+  - services/booking-agent
+  - web
+
+# esbuild (usado por vitest, tsx e vite) baixa o binário da plataforma num script de build;
+# o pnpm 12 falha o install se o script for ignorado. Só ele está liberado.
+allowBuilds:
+  esbuild: true
