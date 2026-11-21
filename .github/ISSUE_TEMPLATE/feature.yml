@@ -1,0 +1,25 @@
+name: Funcionalidade
+description: Proposta de comportamento novo
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Quem sofre com isso (aluno, recepção, estúdio) e por quê.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Escopo
+      options:
+        - label: Continua dentro de aulas e reservas (a política da Meta proíbe chatbot de uso geral)
+          required: true
+        - label: Precisa de ADR (muda arquitetura, contrato ou política de transferência)
