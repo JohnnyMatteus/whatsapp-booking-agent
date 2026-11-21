@@ -1,0 +1,25 @@
+groups:
+  - name: whatsapp-booking-agent
+    rules:
+      - alert: CitacaoForaDasFerramentas
+        expr: increase(wba_citation_violations_total[15m]) > 0
+        labels: { severity: page }
+        annotations:
+          summary: "Resposta citou data ou hora fora das ferramentas e foi trocada pela mensagem segura"
+          description: "Templates ou o guard de citação mudaram; ver docs/roteiros/escopo-e-recusas.md."
+      - alert: AssinaturaDoWebhookInvalida
+        expr: increase(wba_webhook_requests_total{result="invalid_signature"}[10m]) > 5
+        labels: { severity: warn }
+        annotations:
+          summary: "Requisições com X-Hub-Signature-256 inválida (App Secret trocado ou tráfego forjado)"
+      - alert: EnviosParaDLQ
+        expr: increase(wba_queue_messages_total{result="dead_letter"}[15m]) > 0
+        labels: { severity: warn }
+        annotations:
+          summary: "Mensagens na DLQ da fila {{ $labels.queue }}"
+      - alert: TransferenciasPorFalhaAltas
+        expr: sum(rate(wba_handoffs_total{reason="repeated_failure"}[30m])) / clamp_min(sum(rate(wba_agent_turns_total[30m])), 1e-9) > 0.05
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "Mais de 5% dos turnos terminam em transferência por falha (LLM ou agenda instáveis)"

@@ -1,0 +1,55 @@
+{
+  "mappings": [
+    {
+      "request": { "method": "GET", "urlPath": "/api/v1/sessions" },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "bodyFileName": "sessions.json", "transformers": ["response-template"] }
+    },
+    {
+      "priority": 1,
+      "request": { "method": "GET", "urlPathPattern": "/api/v1/sessions/[^/]*(PILATES|VINYASA)" },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "bodyFileName": "session-full.json", "transformers": ["response-template"] }
+    },
+    {
+      "priority": 2,
+      "request": { "method": "GET", "urlPathPattern": "/api/v1/sessions/[^/]+" },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "bodyFileName": "session.json", "transformers": ["response-template"] }
+    },
+    {
+      "request": { "method": "GET", "urlPath": "/api/v1/me/bookings" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "data": [], "meta": { "current_page": 1, "last_page": 1, "per_page": 50, "total": 0 } }
+      }
+    },
+    {
+      "priority": 1,
+      "request": { "method": "POST", "urlPathPattern": "/api/v1/sessions/[^/]*PILATES/bookings" },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "data": { "id": "01JNY0000000000000MOCKWAIT", "session_id": "{{request.path.[3]}}", "status": "waitlisted", "queued_at": "{{now}}", "confirmed_at": null, "canceled_at": null } },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "priority": 2,
+      "request": { "method": "POST", "urlPathPattern": "/api/v1/sessions/[^/]+/bookings" },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "data": { "id": "01JNY0000000000000MOCKBOOK", "session_id": "{{request.path.[3]}}", "status": "confirmed", "queued_at": "{{now}}", "confirmed_at": "{{now}}", "canceled_at": null } },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "request": { "method": "POST", "urlPathPattern": "/api/v1/bookings/[^/]+/cancel" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "data": { "canceled": { "id": "{{request.path.[3]}}", "session_id": "01JNX0000000000000000HATHA", "status": "canceled", "queued_at": "{{now}}", "confirmed_at": null, "canceled_at": "{{now}}" }, "promoted": null } },
+        "transformers": ["response-template"]
+      }
+    }
+  ]
+}

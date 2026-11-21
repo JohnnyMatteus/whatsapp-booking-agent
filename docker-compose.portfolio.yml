@@ -1,0 +1,12 @@
+# Opcional: liga o servidor MCP ao saas-multitenant real pela rede compartilhada do portfólio.
+# Crie a rede com `make network` e suba o saas-multitenant com o override equivalente dele.
+services:
+  saas-mcp-server:
+    environment:
+      SAAS_BASE_URL: ${SAAS_BASE_URL:-http://app:8000/api}
+    networks: [booking-net, portfolio-net]
+
+networks:
+  portfolio-net:
+    name: portfolio-net
+    external: true

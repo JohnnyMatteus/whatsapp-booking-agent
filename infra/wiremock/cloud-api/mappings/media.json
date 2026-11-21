@@ -1,0 +1,24 @@
+{
+  "mappings": [
+    {
+      "request": { "method": "GET", "urlPathPattern": "/v[0-9.]+/[0-9]{15}" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": {
+          "messaging_product": "whatsapp",
+          "url": "http://cloud-api-mock:8080/media-download/{{request.path.[1]}}",
+          "mime_type": "audio/ogg",
+          "sha256": "bW9jaw==",
+          "file_size": 15,
+          "id": "{{request.path.[1]}}"
+        },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "request": { "method": "GET", "urlPathPattern": "/media-download/.*" },
+      "response": { "status": 200, "headers": { "Content-Type": "audio/ogg" }, "bodyFileName": "sample-voice.ogg" }
+    }
+  ]
+}

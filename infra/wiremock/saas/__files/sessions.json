@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "id": "01JNX0000000000000000HATHA",
+      "series_id": "01JNW00000000000000SERIES1",
+      "title": "Hatha Yoga",
+      "instructor": { "id": "01JNV0000000000000INSTRUT1", "name": "Instrutora Exemplo" },
+      "starts_at": "{{now offset='1 days' format=\"yyyy-MM-dd'T'21:00:00'Z'\"}}",
+      "ends_at": "{{now offset='1 days' format=\"yyyy-MM-dd'T'22:00:00'Z'\"}}",
+      "timezone": "America/Sao_Paulo",
+      "capacity": 12,
+      "confirmed_count": 7,
+      "available_spots": 5,
+      "waitlist_count": 0
+    },
+    {
+      "id": "01JNX000000000000000PILATES",
+      "series_id": "01JNW00000000000000SERIES2",
+      "title": "Pilates Solo",
+      "instructor": { "id": "01JNV0000000000000INSTRUT2", "name": "Instrutor Exemplo" },
+      "starts_at": "{{now offset='2 days' format=\"yyyy-MM-dd'T'10:00:00'Z'\"}}",
+      "ends_at": "{{now offset='2 days' format=\"yyyy-MM-dd'T'11:00:00'Z'\"}}",
+      "timezone": "America/Sao_Paulo",
+      "capacity": 8,
+      "confirmed_count": 8,
+      "available_spots": 0,
+      "waitlist_count": 3
+    },
+    {
+      "id": "01JNX00000000000000VINYASA",
+      "series_id": "01JNW00000000000000SERIES3",
+      "title": "Vinyasa Flow",
+      "instructor": { "id": "01JNV0000000000000INSTRUT1", "name": "Instrutora Exemplo" },
+      "starts_at": "{{now offset='3 days' format=\"yyyy-MM-dd'T'22:30:00'Z'\"}}",
+      "ends_at": "{{now offset='3 days' format=\"yyyy-MM-dd'T'23:30:00'Z'\"}}",
+      "timezone": "America/Sao_Paulo",
+      "capacity": 15,
+      "confirmed_count": 15,
+      "available_spots": 0,
+      "waitlist_count": 0
+    }
+  ],
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 100, "total": 3 }
+}

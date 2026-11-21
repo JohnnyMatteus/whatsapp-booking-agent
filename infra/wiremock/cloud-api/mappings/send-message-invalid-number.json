@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/v[0-9.]+/[0-9]+/messages",
+    "bodyPatterns": [{ "matchesJsonPath": "$[?(@.to == '5511900000099')]" }]
+  },
+  "response": {
+    "status": 400,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": { "message": "(#131026) Message undeliverable", "type": "OAuthException", "code": 131026, "fbtrace_id": "MOCKTRACE" } }
+  }
+}
