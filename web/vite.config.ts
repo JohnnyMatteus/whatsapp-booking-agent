@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
       include: ['tests/**/*.test.ts'],
       server: { deps: { inline: ['vuetify'] } },
       css: false,
+      // O primeiro teste paga a importação do Vuetify; com o CI paralelo, 5 s é pouco.
+      testTimeout: 20_000,
     },
   };
 });
