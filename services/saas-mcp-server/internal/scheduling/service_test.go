@@ -158,3 +158,7 @@ func TestCancelarExigeReserva(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func (f *fakeAgenda) ConfirmLink(context.Context, Member, string) (VinculoConfirmado, error) {
+	return VinculoConfirmado{Nome: "Aluna Exemplo"}, nil
+}

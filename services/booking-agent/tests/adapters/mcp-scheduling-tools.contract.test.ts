@@ -86,4 +86,16 @@ describe('adaptador MCP da agenda', () => {
     expect(outcome.booking.status).toBe('canceled');
     expect(outcome.waitlistPromoted).toBe(true);
   });
+
+  it('traduz vincular_contato e os erros de vínculo', async () => {
+    const ok = toolsReturning({ content: [], structuredContent: { nome: 'Aluna Exemplo' } } as Result);
+    await expect(ok.tools.linkContact(member, '482913')).resolves.toEqual({ name: 'Aluna Exemplo' });
+    expect(ok.calls[0]).toEqual({ name: 'vincular_contato', arguments: { codigo: '482913', estudio: 'estudio-lotus', contato: '5511900000001' } });
+
+    const rejected = toolsReturning({
+      isError: true,
+      content: [{ type: 'text', text: JSON.stringify({ codigo: 'codigo_vinculo_invalido', mensagem: 'x', retentavel: false }) }],
+    } as Result);
+    await expect(rejected.tools.linkContact(member, '000000')).rejects.toMatchObject({ code: 'invalid_link_code' });
+  });
 });

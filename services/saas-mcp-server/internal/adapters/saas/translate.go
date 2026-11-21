@@ -64,6 +64,9 @@ var errorBySaaSType = map[string]scheduling.Code{
 	"tenant_not_recognized":         scheduling.CodeAcessoNegado,
 	"role_not_recognized":           scheduling.CodeAcessoNegado,
 	"validation_failed":             scheduling.CodeEntradaInvalida,
+	"whatsapp_contact_not_linked":   scheduling.CodeNaoVinculado,
+	"invalid_link_code":             scheduling.CodeCodigoInvalido,
+	"whatsapp_agent_required":       scheduling.CodeAcessoNegado,
 	"identity_provider_unavailable": scheduling.CodeSaasIndisponivel,
 }
 
@@ -76,6 +79,8 @@ var messageByCode = map[scheduling.Code]string{
 	scheduling.CodeNaoEncontrado:    "aula ou reserva não encontrada",
 	scheduling.CodeAcessoNegado:     "o aluno não tem acesso a esta operação no estúdio",
 	scheduling.CodeEntradaInvalida:  "parâmetros recusados pelo sistema de agenda",
+	scheduling.CodeNaoVinculado:     "este telefone ainda não está vinculado a um aluno; peça o código de vínculo",
+	scheduling.CodeCodigoInvalido:   "código de vínculo inválido, expirado ou já usado",
 	scheduling.CodeSaasIndisponivel: "sistema de agenda indisponível",
 }
 

@@ -30,6 +30,7 @@ const Reserva = z.object({ id: z.string(), aula_id: z.string(), situacao: Situac
 const ListarHorariosOut = z.object({ aulas: z.array(Aula) });
 const ReservaOut = z.object({ reserva: Reserva });
 const CancelarOut = z.object({ reserva: Reserva, fila_promovida: z.boolean() });
+const VincularOut = z.object({ nome: z.string() });
 const ToolError = z.object({ codigo: z.string(), mensagem: z.string(), retentavel: z.boolean() });
 
 /** Mapa explícito: código da ferramenta → erro de domínio. Código desconhecido é falha, não regra. */
@@ -43,6 +44,8 @@ const ERROR_BY_CODE: Record<string, DomainErrorCode> = {
   reserva_ja_cancelada: 'booking_already_canceled',
   nao_encontrado: 'not_found',
   acesso_negado: 'access_denied',
+  contato_nao_vinculado: 'contact_not_linked',
+  codigo_vinculo_invalido: 'invalid_link_code',
   entrada_invalida: 'invalid_request',
   saas_indisponivel: 'scheduling_unavailable',
 };
@@ -90,6 +93,11 @@ export class McpSchedulingTools implements SchedulingTools {
   async joinWaitlist(member: MemberContext, sessionId: string): Promise<Booking> {
     const out = await this.call('entrar_lista_espera', member, { aula_id: sessionId }, ReservaOut);
     return toBooking(out.reserva);
+  }
+
+  async linkContact(member: MemberContext, code: string): Promise<{ readonly name: string }> {
+    const out = await this.call('vincular_contato', member, { codigo: code }, VincularOut);
+    return { name: out.nome };
   }
 
   private async call<T>(tool: string, member: MemberContext, args: Record<string, string>, schema: z.ZodType<T>): Promise<T> {

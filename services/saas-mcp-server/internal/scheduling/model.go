@@ -67,3 +67,8 @@ type Cancelamento struct {
 	Reserva       Reserva `json:"reserva"`
 	FilaPromovida bool    `json:"fila_promovida"`
 }
+
+// VinculoConfirmado é o resultado do opt-in: o nome do aluno ao qual o telefone ficou ligado.
+type VinculoConfirmado struct {
+	Nome string `json:"nome"`
+}

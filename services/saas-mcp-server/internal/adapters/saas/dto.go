@@ -68,3 +68,9 @@ type problem struct {
 	Status int    `json:"status"`
 	Detail string `json:"detail"`
 }
+
+type linkEnvelope struct {
+	Data struct {
+		MemberName string `json:"member_name"`
+	} `json:"data"`
+}

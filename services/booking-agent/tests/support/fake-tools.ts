@@ -34,6 +34,11 @@ export class FakeSchedulingTools implements SchedulingTools {
     return Booking.create({ id: `bk-${sessionId}`, sessionId, status: 'waitlisted' });
   }
 
+  async linkContact(_member: MemberContext, code: string): Promise<{ name: string }> {
+    this.record(`linkContact ${code}`);
+    return { name: 'Aluna Exemplo' };
+  }
+
   private record(call: string): void {
     this.calls.push(call);
     if (this.failWith) throw this.failWith;

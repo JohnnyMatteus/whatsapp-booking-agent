@@ -37,6 +37,8 @@ export interface SchedulingTools {
   book(member: MemberContext, sessionId: string): Promise<Booking>;
   cancel(member: MemberContext, bookingId: string): Promise<CancellationOutcome>;
   joinWaitlist(member: MemberContext, sessionId: string): Promise<Booking>;
+  /** Opt-in: confirma o código gerado pelo aluno no SaaS para o telefone que o enviou. */
+  linkContact(member: MemberContext, code: string): Promise<{ readonly name: string }>;
 }
 
 export type Turn =
