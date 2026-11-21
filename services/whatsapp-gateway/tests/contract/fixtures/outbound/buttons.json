@@ -1,0 +1,11 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "5511900000002",
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": { "text": "Pilates Solo (qua 04/03 07:00) está lotada. Quer entrar na lista de espera?" },
+    "action": { "buttons": [{ "type": "reply", "reply": { "id": "v1:wl:01JNX000000000000000PILATES", "title": "Entrar na fila" } }] }
+  }
+}

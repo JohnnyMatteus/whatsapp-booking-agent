@@ -6,7 +6,7 @@ const origin = { tenantId: 'estudio-lotus', contactId: '5511900000001', messageI
 
 describe('envelope do contrato', () => {
   it('faz ida e volta de um pedido de reserva', () => {
-    const envelope = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'list_reply' }, meta);
+    const envelope = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'list' }, meta);
 
     const parsed = parseEnvelope(JSON.parse(JSON.stringify(envelope)));
 
@@ -15,14 +15,14 @@ describe('envelope do contrato', () => {
   });
 
   it('rejeita tipo desconhecido e payload incompatível com o tipo', () => {
-    const valid = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'flow' }, meta);
+    const valid = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'form' }, meta);
 
     expect(() => parseEnvelope({ ...valid, type: 'inbound.unknown' })).toThrow(ContractViolation);
     expect(() => parseEnvelope({ ...valid, type: MessageType.CancellationRequested })).toThrow(/bookingId/);
   });
 
   it('rejeita versão de contrato diferente', () => {
-    const valid = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'flow' }, meta);
+    const valid = createEnvelope(MessageType.BookingRequested, { ...origin, sessionId: 'ses-1', source: 'form' }, meta);
 
     expect(() => parseEnvelope({ ...valid, version: 2 })).toThrow(ContractViolation);
   });

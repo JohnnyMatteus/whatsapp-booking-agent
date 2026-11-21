@@ -1,0 +1,7 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "5511900000001",
+  "type": "text",
+  "text": { "body": "Pronto! Sua vaga em Hatha Yoga (ter 03/03 18:00) está confirmada.", "preview_url": false }
+}

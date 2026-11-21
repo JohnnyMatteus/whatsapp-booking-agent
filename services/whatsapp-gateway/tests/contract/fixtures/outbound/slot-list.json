@@ -1,0 +1,22 @@
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "5511900000001",
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": { "text": "Separei as aulas desta semana para você." },
+    "action": {
+      "button": "Ver opções",
+      "sections": [
+        {
+          "title": "Aulas",
+          "rows": [
+            { "id": "v1:bk:01JNX0000000000000000HATHA", "title": "Hatha Yoga", "description": "ter 03/03 18:00 · com vaga" },
+            { "id": "v1:wl:01JNX000000000000000PILATES", "title": "Pilates Solo Intermediá…", "description": "qua 04/03 07:00 · lotada, fila 3" }
+          ]
+        }
+      ]
+    }
+  }
+}

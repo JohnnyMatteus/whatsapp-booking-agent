@@ -1,0 +1,28 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000001", "phone_number_id": "100000000000001" },
+            "contacts": [{ "profile": { "name": "Aluna Exemplo" }, "wa_id": "5511900000001" }],
+            "messages": [
+              {
+                "context": { "from": "15550000001", "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABEYEjAwMDAwMDAwMDAwMDAwMDAwNAA=" },
+                "from": "5511900000001",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDA2AA==",
+                "timestamp": "1772453100",
+                "type": "button",
+                "button": { "payload": "Ver horários", "text": "Ver horários" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

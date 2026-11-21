@@ -1,0 +1,41 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000001", "phone_number_id": "100000000000001" },
+            "statuses": [
+              {
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABEYEjAwMDAwMDAwMDAwMDAwMDAwNQA=",
+                "status": "delivered",
+                "timestamp": "1772453160",
+                "recipient_id": "5511900000001",
+                "conversation": { "id": "c0000000000000000000000000000001", "origin": { "type": "service" } },
+                "pricing": { "billable": false, "pricing_model": "PMP", "category": "service", "type": "free_customer_service" }
+              },
+              {
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMxUCABEYEjAwMDAwMDAwMDAwMDAwMDAwNgA=",
+                "status": "failed",
+                "timestamp": "1772453170",
+                "recipient_id": "5511900000003",
+                "errors": [
+                  {
+                    "code": 131047,
+                    "title": "Re-engagement message",
+                    "message": "Re-engagement message",
+                    "error_data": { "details": "Message failed to send because more than 24 hours have passed since the customer last replied to this number." }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

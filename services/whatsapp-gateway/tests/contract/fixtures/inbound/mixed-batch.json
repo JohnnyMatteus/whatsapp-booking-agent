@@ -1,0 +1,61 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000001", "phone_number_id": "100000000000001" },
+            "contacts": [{ "profile": { "name": "Aluna Exemplo" }, "wa_id": "5511900000001" }],
+            "messages": [
+              {
+                "from": "5511900000001",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDA3AA==",
+                "timestamp": "1772453220",
+                "type": "reaction",
+                "reaction": { "message_id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABEYEjAwMDAwMDAwMDAwMDAwMDAwNQA=", "emoji": "🙏" }
+              },
+              {
+                "from": "5511900000001",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDA4AA==",
+                "timestamp": "1772453230",
+                "type": "image",
+                "image": { "mime_type": "image/jpeg", "sha256": "aW1hZ2VtLWZpY3RpY2lh", "id": "900000000000002", "caption": "comprovante" }
+              },
+              {
+                "from": "5511900000001",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDA5AA==",
+                "timestamp": "1772453240",
+                "type": "tipo_que_a_meta_ainda_vai_inventar",
+                "tipo_que_a_meta_ainda_vai_inventar": {}
+              }
+            ]
+          }
+        },
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000099", "phone_number_id": "100000000000099" },
+            "messages": [
+              {
+                "from": "5511900000004",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwNBUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDEwAA==",
+                "timestamp": "1772453250",
+                "text": { "body": "oi" },
+                "type": "text"
+              }
+            ]
+          }
+        },
+        {
+          "field": "message_template_status_update",
+          "value": { "event": "APPROVED", "message_template_id": 300000000000001, "message_template_name": "lembrete_aula" }
+        }
+      ]
+    }
+  ]
+}

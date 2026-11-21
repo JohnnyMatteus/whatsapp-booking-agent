@@ -32,7 +32,8 @@ const Origin = z.object({
   receivedAt: isoInstant,
 });
 
-export const ActionSource = z.enum(['list_reply', 'button_reply', 'flow']);
+/** Como o aluno escolheu: numa lista, num botão ou num formulário (vocabulário neutro, sem termos da Meta). */
+export const ActionSource = z.enum(['list', 'button', 'form']);
 export type ActionSource = z.infer<typeof ActionSource>;
 
 export const MessageReceived = Origin.extend({
