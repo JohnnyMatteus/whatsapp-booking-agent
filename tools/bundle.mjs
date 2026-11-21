@@ -1,9 +1,8 @@
-// Empacota os entrypoints de um serviço Node com esbuild.
-// Os pacotes do workspace (@wba/*) entram no bundle (são código-fonte TypeScript); as
-// dependências npm ficam externas e são instaladas na imagem com `pnpm deploy --prod`.
+// Empacota os entrypoints de um serviço Node num único arquivo por entrypoint (esbuild).
+// Tudo entra no bundle, inclusive as dependências npm (todas JavaScript puro): a imagem final
+// leva só dist/ sobre o Node, sem node_modules nem gerenciador de pacotes.
 // Uso: node ../../tools/bundle.mjs src/main.ts [src/outro.ts ...]
 import { build } from 'esbuild';
-import { readFileSync } from 'node:fs';
 import process from 'node:process';
 
 const entryPoints = process.argv.slice(2);
@@ -11,9 +10,6 @@ if (entryPoints.length === 0) {
   process.stderr.write('informe ao menos um entrypoint\n');
   process.exit(1);
 }
-
-const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const external = Object.keys(pkg.dependencies ?? {}).filter((name) => !name.startsWith('@wba/'));
 
 await build({
   entryPoints,
@@ -23,6 +19,7 @@ await build({
   target: 'node22',
   format: 'esm',
   sourcemap: true,
-  external,
+  // Dependências CommonJS chamam require() de módulos do Node; no ESM ele precisa existir.
+  banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
   logLevel: 'warning',
 });
