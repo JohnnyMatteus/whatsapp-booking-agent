@@ -24,7 +24,8 @@ export interface SessionListing {
 
 export interface CancellationOutcome {
   readonly booking: Booking;
-  readonly freedSeat: boolean;
+  /** O SaaS promoveu alguém da fila para a vaga liberada. */
+  readonly waitlistPromoted: boolean;
 }
 
 /**

@@ -100,6 +100,15 @@ describe('agente: transferência para humano', () => {
     expect(second.outcome).toBe('handed_off');
   });
 
+  it('LLM fora do ar conta como falha e o aluno recebe resposta', async () => {
+    const t = setup();
+
+    const result = await t.say('hmm, e aquela?');
+
+    expect(result.outcome).toBe('failed');
+    expect(allText(result.replies[0]!)).toMatch(/indisponível/);
+  });
+
   it('erro inesperado da ferramenta conta como falha, não como regra de negócio', async () => {
     const t = setup();
     t.tools.failWith = new Error('socket hang up');

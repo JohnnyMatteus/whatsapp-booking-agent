@@ -103,9 +103,12 @@ export function buildAgentGraph(deps: AgentDeps) {
       const range = result.day ? dateRangeForIsoDay(result.day) : dateRangeFor(textOf(state.turn), now, timezone);
       return { steps, intent: result.intent, targetId: result.sessionId, range, next: 'act' };
     } catch (error) {
-      if (!(error instanceof LlmOutputInvalid)) throw error;
-      deps.observer?.llmRejected('interpret', error.issues);
-      return { steps, failure: 'not_understood', next: 'fail' };
+      // Saída inválida = não entendeu; erro de transporte = LLM fora do ar. Os dois contam como falha.
+      if (error instanceof LlmOutputInvalid) {
+        deps.observer?.llmRejected('interpret', error.issues);
+        return { steps, failure: 'not_understood', next: 'fail' };
+      }
+      return { steps, failure: 'unavailable', next: 'fail' };
     }
   };
 
@@ -187,9 +190,9 @@ export function buildAgentGraph(deps: AgentDeps) {
     async function cancel(bookingId: string): Promise<Update> {
       const slot = conversation.offeredBooking(bookingId, now);
       // Pré-validação local: evita ida ao SaaS para o que o domínio já sabe recusar.
-      Booking.create({ id: bookingId, sessionId: slot.sessionId, status: slot.booking?.status ?? 'confirmed' }).cancel(sessionOf(slot), now);
-      const outcome = await tools.cancel(member(state), bookingId);
-      return { replies: [replies.canceled(slot, outcome.freedSeat)], next: 'finalize' };
+      const local = Booking.create({ id: bookingId, sessionId: slot.sessionId, status: slot.booking?.status ?? 'confirmed' }).cancel(sessionOf(slot), now);
+      await tools.cancel(member(state), bookingId);
+      return { replies: [replies.canceled(slot, local.freedSeat)], next: 'finalize' };
     }
   };
 
@@ -201,9 +204,8 @@ export function buildAgentGraph(deps: AgentDeps) {
       const ordered = [...state.slots].sort((a, b) => Number(highlighted.has(b.sessionId)) - Number(highlighted.has(a.sessionId)));
       return { steps, replies: [replies.slotChoices(intro.text, ordered)], next: 'finalize' };
     } catch (error) {
-      if (!(error instanceof LlmOutputInvalid)) throw error;
       // A lista já está correta; só a frase de abertura cai para o texto fixo.
-      deps.observer?.llmRejected('compose', error.issues);
+      if (error instanceof LlmOutputInvalid) deps.observer?.llmRejected('compose', error.issues);
       return { steps, replies: [replies.slotChoices(FALLBACK_INTRO, state.slots)], next: 'finalize' };
     }
   };

@@ -26,7 +26,7 @@ export class FakeSchedulingTools implements SchedulingTools {
 
   async cancel(_member: MemberContext, bookingId: string): Promise<CancellationOutcome> {
     this.record(`cancel ${bookingId}`);
-    return { booking: Booking.create({ id: bookingId, sessionId: 'ses', status: 'canceled' }), freedSeat: true };
+    return { booking: Booking.create({ id: bookingId, sessionId: 'ses', status: 'canceled' }), waitlistPromoted: false };
   }
 
   async joinWaitlist(_member: MemberContext, sessionId: string): Promise<Booking> {
