@@ -1,0 +1,13 @@
+{
+  "request": { "method": "POST", "urlPathPattern": "/v[0-9.]+/[0-9]+/messages" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "messaging_product": "whatsapp",
+      "contacts": [{ "input": "{{jsonPath request.body '$.to'}}", "wa_id": "{{jsonPath request.body '$.to'}}" }],
+      "messages": [{ "id": "wamid.MOCK{{randomValue length=24 type='ALPHANUMERIC'}}" }]
+    },
+    "transformers": ["response-template"]
+  }
+}

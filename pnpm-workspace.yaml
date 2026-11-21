@@ -1,0 +1,16 @@
+packages:
+  - packages/*
+  - services/whatsapp-gateway
+  - services/booking-agent
+  - web
+
+# O pnpm 12 falha o install se um script de build não for decidido explicitamente.
+# esbuild (vitest, tsx, vite) precisa do script para baixar o binário da plataforma.
+# ssh2, cpu-features e protobufjs (testcontainers) funcionam sem os seus; vue-demi (TanStack
+# Query) já resolve Vue 3 por padrão.
+allowBuilds:
+  esbuild: true
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
+  vue-demi: false

@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": "01JNX000000000000000PILATES",
+      "series_id": "01JNW00000000000000SERIES2",
+      "title": "Pilates Solo",
+      "instructor": { "id": "01JNV0000000000000INSTRUT2", "name": "Instrutor Exemplo" },
+      "starts_at": "2026-03-04T10:00:00Z",
+      "ends_at": "2026-03-04T11:00:00Z",
+      "starts_at_local": "2026-03-04T07:00:00-03:00",
+      "ends_at_local": "2026-03-04T08:00:00-03:00",
+      "timezone": "America/Sao_Paulo",
+      "capacity": 8,
+      "confirmed_count": 8,
+      "available_spots": 0,
+      "waitlist_count": 3
+    }
+  ],
+  "links": { "first": "http://saas.local/api/v1/sessions?page=1", "last": "http://saas.local/api/v1/sessions?page=2", "prev": "http://saas.local/api/v1/sessions?page=1", "next": null },
+  "meta": { "current_page": 2, "from": 2, "last_page": 2, "path": "http://saas.local/api/v1/sessions", "per_page": 100, "to": 2, "total": 2 }
+}

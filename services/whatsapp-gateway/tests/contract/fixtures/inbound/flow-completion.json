@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000001", "phone_number_id": "100000000000001" },
+            "contacts": [{ "profile": { "name": "Aluno Exemplo" }, "wa_id": "5511900000002" }],
+            "messages": [
+              {
+                "context": { "from": "15550000001", "id": "wamid.HBgNNTUxMTkwMDAwMDAwMhUCABEYEjAwMDAwMDAwMDAwMDAwMDAwMwA=" },
+                "from": "5511900000002",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMhUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDA1AA==",
+                "timestamp": "1772453040",
+                "type": "interactive",
+                "interactive": {
+                  "type": "nfm_reply",
+                  "nfm_reply": {
+                    "response_json": "{\"flow_token\":\"flow-token-ficticio-0001\",\"action\":\"waitlist\",\"target_id\":\"01JNX000000000000000PILATES\"}",
+                    "body": "Sent",
+                    "name": "flow"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

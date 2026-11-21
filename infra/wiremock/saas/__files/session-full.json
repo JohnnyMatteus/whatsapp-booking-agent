@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "{{request.path.[3]}}",
+    "series_id": "01JNW00000000000000SERIES2",
+    "title": "Pilates Solo",
+    "instructor": { "id": "01JNV0000000000000INSTRUT2", "name": "Instrutor Exemplo" },
+    "starts_at": "{{now offset='2 days' format=\"yyyy-MM-dd'T'10:00:00'Z'\"}}",
+    "ends_at": "{{now offset='2 days' format=\"yyyy-MM-dd'T'11:00:00'Z'\"}}",
+    "timezone": "America/Sao_Paulo",
+    "capacity": 8,
+    "confirmed_count": 8,
+    "available_spots": 0,
+    "waitlist_count": 3
+  }
+}

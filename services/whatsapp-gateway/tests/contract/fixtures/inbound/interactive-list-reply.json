@@ -1,0 +1,31 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000001", "phone_number_id": "100000000000001" },
+            "contacts": [{ "profile": { "name": "Aluna Exemplo" }, "wa_id": "5511900000001" }],
+            "messages": [
+              {
+                "context": { "from": "15550000001", "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABEYEjAwMDAwMDAwMDAwMDAwMDAwMQA=" },
+                "from": "5511900000001",
+                "id": "wamid.HBgNNTUxMTkwMDAwMDAwMRUCABIYFDNBMDAwMDAwMDAwMDAwMDAwMDAzAA==",
+                "timestamp": "1772452920",
+                "type": "interactive",
+                "interactive": {
+                  "type": "list_reply",
+                  "list_reply": { "id": "v1:bk:01JNX0000000000000000HATHA", "title": "Hatha Yoga", "description": "ter 03/03 18:00 · com vaga" }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+name: Bug
+description: Algo não funciona como deveria
+labels: [bug]
+body:
+  - type: dropdown
+    id: service
+    attributes:
+      label: Serviço
+      options: [whatsapp-gateway, booking-agent, saas-mcp-server, transcription-worker, web, infraestrutura]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu
+      description: Comportamento observado e esperado. Não cole telefones, mensagens reais de alunos nem tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Como reproduzir
+      description: Passos, payload anonimizado ou comando (`make seed TEXT="..."`).
+    validations:
+      required: true
+  - type: input
+    id: correlation
+    attributes:
+      label: correlationId (id da mensagem do WhatsApp), se houver

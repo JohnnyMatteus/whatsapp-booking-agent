@@ -1,0 +1,38 @@
+{
+  "name": "@wba/booking-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Domínio de Agendamento, casos de uso e agente LangGraph: consome comandos da fila, chama as ferramentas MCP e publica respostas.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "build": "node ../../tools/bundle.mjs src/main.ts",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.5.0",
+    "@langchain/langgraph": "^1.7.5",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@opentelemetry/api": "^1.10.0",
+    "@wba/contracts": "workspace:*",
+    "@wba/messaging": "workspace:*",
+    "@wba/observability": "workspace:*",
+    "amqplib": "^0.10.9",
+    "fastify": "^5.6.1",
+    "ioredis": "^5.8.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@testcontainers/rabbitmq": "^11.10.0",
+    "@testcontainers/redis": "^11.10.0",
+    "@types/amqplib": "^0.10.8",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

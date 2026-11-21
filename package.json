@@ -1,0 +1,27 @@
+{
+  "name": "whatsapp-booking-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agente de agendamento via WhatsApp para alunos de estúdios de yoga e pilates (domínio fictício).",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.21.0",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --workspace-concurrency=1 run typecheck",
+    "test": "pnpm -r run test",
+    "build": "pnpm -r run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.27.0",
+    "eslint": "^10.15.0",
+    "eslint-plugin-vue": "^10.6.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vue-eslint-parser": "^10.2.0"
+  }
+}
