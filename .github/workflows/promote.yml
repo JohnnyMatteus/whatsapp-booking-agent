@@ -1,0 +1,42 @@
+name: Promote
+
+# Leva para a main todo commit de uma branch feat/* cujo CI terminou verde.
+# O CI é a única trava: vermelho não entra.
+on:
+  workflow_run:
+    workflows: ["CI", "ci"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-main
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'feat/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merge do commit testado na main
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$SHA"
+          if git merge-base --is-ancestor "$SHA" HEAD; then
+            echo "Commit ${SHA::7} já está na main."
+            exit 0
+          fi
+          git merge --no-ff "$SHA" -m "chore: promove $BRANCH (CI verde em ${SHA::7})"
+          git push origin HEAD:main
