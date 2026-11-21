@@ -4,7 +4,11 @@ packages:
   - services/booking-agent
   - web
 
-# esbuild (usado por vitest, tsx e vite) baixa o binário da plataforma num script de build;
-# o pnpm 12 falha o install se o script for ignorado. Só ele está liberado.
+# O pnpm 12 falha o install se um script de build não for decidido explicitamente.
+# esbuild (vitest, tsx, vite) precisa do script para baixar o binário da plataforma.
+# ssh2, cpu-features e protobufjs (dependências do testcontainers) funcionam sem os seus.
 allowBuilds:
   esbuild: true
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
