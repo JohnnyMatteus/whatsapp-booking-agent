@@ -1,13 +1,12 @@
 # syntax=docker/dockerfile:1.7
 # Contexto de build: raiz do repositório (o serviço usa pacotes do workspace).
 FROM node:22.21.1-alpine3.22 AS build
-RUN corepack enable
+RUN npm install -g pnpm@12.21.0
 WORKDIR /repo
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY tools ./tools
-COPY packages ./packages
-COPY services/booking-agent ./services/booking-agent
-RUN pnpm install --frozen-lockfile --filter "@wba/booking-agent..." && pnpm --filter @wba/booking-agent build
+# O workspace inteiro entra no estágio de build (o .dockerignore tira node_modules e artefatos):
+# o lockfile é um só e o install congelado precisa de todos os projetos.
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm --filter @wba/booking-agent build
 
 # O bundle do esbuild já contém as dependências: a imagem final leva só dist/.
 FROM node:22.21.1-alpine3.22

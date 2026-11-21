@@ -1,0 +1,193 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Cancela execuções antigas só em PR; na main cada commit mantém seu resultado.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Um job por serviço. Todos rodam sempre: são rápidos e evitam "verde por omissão".
+jobs:
+  lint:
+    name: ESLint (workspace TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  packages:
+    name: pacotes compartilhados (contracts, messaging, observability)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter "./packages/**" typecheck
+      - name: Testes
+        run: pnpm --filter @wba/contracts --filter @wba/messaging test
+
+  whatsapp-gateway:
+    name: whatsapp-gateway (webhook e sender)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @wba/whatsapp-gateway typecheck
+      - name: Testes unitários e de contrato da ACL
+        run: pnpm --filter @wba/whatsapp-gateway test
+      - name: Integração (Redis e RabbitMQ reais via testcontainers)
+        run: pnpm --filter @wba/whatsapp-gateway test:integration
+      - name: Build
+        run: pnpm --filter @wba/whatsapp-gateway build
+      - name: Imagem Docker
+        run: docker build -f services/whatsapp-gateway/Dockerfile -t whatsapp-booking-agent/whatsapp-gateway:ci .
+
+  booking-agent:
+    name: booking-agent (domínio, agente e adaptadores)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @wba/booking-agent typecheck
+      # Cliente LLM falso roteirizado: nenhum modelo real é chamado no CI.
+      - name: Testes unitários (domínio, grafo, casos de uso, contratos)
+        run: pnpm --filter @wba/booking-agent test
+      - name: Integração (Redis real via testcontainers)
+        run: pnpm --filter @wba/booking-agent test:integration
+      - name: Build
+        run: pnpm --filter @wba/booking-agent build
+      - name: Imagem Docker
+        run: docker build -f services/booking-agent/Dockerfile -t whatsapp-booking-agent/booking-agent:ci .
+
+  saas-mcp-server:
+    name: saas-mcp-server (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/saas-mcp-server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/saas-mcp-server/go.mod
+          cache-dependency-path: services/saas-mcp-server/go.sum
+      - name: Lint (gofmt + go vet)
+        run: make lint
+      - name: Testes (unitários, contrato da ACL do SaaS e MCP em memória)
+        run: make test
+      - name: Build
+        run: make build
+      - name: Imagem Docker
+        run: docker build -t whatsapp-booking-agent/saas-mcp-server:ci .
+
+  transcription-worker:
+    name: transcription-worker (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/transcription-worker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Instalar (sem o modelo de transcrição)
+        run: make install
+      - name: Lint (ruff + mypy estrito)
+        run: make lint
+      - name: Testes (transcritor falso)
+        run: make test
+      - name: Imagem Docker
+        run: docker build -t whatsapp-booking-agent/transcription-worker:ci .
+
+  web:
+    name: web (painel Vue)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck (vue-tsc)
+        run: pnpm --filter @wba/web typecheck
+      - name: Testes
+        run: pnpm --filter @wba/web test
+      - name: Build
+        run: pnpm --filter @wba/web build
+      - name: Imagem Docker
+        run: docker build -f web/Dockerfile -t whatsapp-booking-agent/web:ci .
+
+  infra:
+    name: infraestrutura (compose, Prometheus, mocks, scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: docker compose config (todos os profiles e o override do portfólio)
+        run: |
+          docker compose --profile core --profile observability --profile llm --profile tools config -q
+          docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
+      - name: promtool valida configuração e alertas
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
+      - name: Mapeamentos do WireMock são JSON válido
+        run: for f in infra/wiremock/*/mappings/*.json; do python3 -m json.tool "$f" > /dev/null; done
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh infra/minio/*.sh
