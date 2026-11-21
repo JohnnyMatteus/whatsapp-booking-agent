@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/src/main.js",
+    "build": "node ../../tools/bundle.mjs src/main.ts",
+    "start": "node dist/main.js",
     "dev": "tsx src/main.ts"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
     "@opentelemetry/sdk-trace": "^3.1.1",
     "@opentelemetry/semantic-conventions": "^1.45.0",
     "@wba/contracts": "workspace:*",
+    "@wba/messaging": "workspace:*",
     "amqplib": "^0.10.9",
     "fastify": "^5.6.1",
     "ioredis": "^5.8.2",
