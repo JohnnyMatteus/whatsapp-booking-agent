@@ -1,0 +1,27 @@
+// Configuração por ambiente, validada na subida. Mensagens de erro citam só o nome da variável.
+import { z } from 'zod';
+
+const Env = z.object({
+  PORT: z.coerce.number().int().default(8081),
+  RABBITMQ_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
+  MCP_SERVER_URL: z.string().url(),
+  MCP_AUTH_TOKEN: z.string().min(16),
+  LLM_BASE_URL: z.string().url(),
+  LLM_API_KEY: z.string().min(1),
+  LLM_MODEL: z.string().min(1),
+  LLM_TIMEOUT_MS: z.coerce.number().int().default(20_000),
+  STUDIO_TIMEZONE: z.string().default('America/Sao_Paulo'),
+  PANEL_API_TOKEN: z.string().min(16),
+  CONSUMER_PREFETCH: z.coerce.number().int().min(1).default(5),
+  CONSUMER_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(4),
+  CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().min(100).default(3000),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+});
+export type AgentConfig = z.infer<typeof Env>;
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
+  const parsed = Env.safeParse(env);
+  if (!parsed.success) throw new Error(`Configuração inválida: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+  return parsed.data;
+}
