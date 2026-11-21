@@ -1,0 +1,37 @@
+[project]
+name = "transcription-worker"
+version = "0.1.0"
+description = "Transcreve áudios do WhatsApp localmente (faster-whisper) e devolve o texto ao fluxo do agente."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+# Adaptadores de produção: fila, armazenamento S3/MinIO e download de mídia da Cloud API.
+runtime = ["aio-pika>=9.5,<10", "boto3>=1.40,<2", "httpx>=0.28,<1", "prometheus-client>=0.23,<1"]
+# Modelo local de transcrição (pesado: fica fora do CI de testes unitários).
+whisper = ["faster-whisper>=1.2,<2"]
+dev = ["pytest>=8.4,<9", "ruff>=0.14,<1", "mypy>=1.18,<2"]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/transcription_worker/domain.py", "src/transcription_worker/ports.py", "src/transcription_worker/service.py", "src/transcription_worker/contracts.py"]
