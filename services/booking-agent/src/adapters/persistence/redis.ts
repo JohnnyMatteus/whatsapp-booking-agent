@@ -18,7 +18,52 @@ import { Conversation, type ConversationSnapshot } from '../../domain/conversati
 import { TIMELINE_LIMIT, summarize } from './summary.js';
 
 /** Conversa parada há 30 dias some; a transferida também (o atendimento já terá acontecido). */
-const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
+/**
+ * Prazo dos modelos de leitura do painel (resumo, linha do tempo, ticket de atendimento). Uma hora a menos que o
+ * da conversa: eles são gravados depois dela, então expiram antes, e o item que a fila lista sempre tem detalhe.
+ */
+export const READ_MODEL_TTL_SECONDS = CONVERSATION_TTL_SECONDS - 60 * 60;
+const SECOND_MS = 1000;
+
+/**
+ * Hash por estúdio em que cada campo tem o seu prazo (HEXPIRE, Redis 7.4+): a atividade de uma conversa não
+ * renova a de outra, e nada com telefone ou texto sobrevive ao prazo. Campos gravados antes dessa mudança não
+ * têm prazo; `readFieldsAdoptingLegacy` dá a eles o prazo que teriam tido, ou os apaga se já passaram dele.
+ */
+async function setFieldWithTtl(redis: Redis, key: string, field: string, value: string, mode: 'overwrite' | 'keep-first'): Promise<void> {
+  if (mode === 'overwrite') {
+    // HSET num campo existente apaga o prazo dele; o HEXPIRE seguinte o põe de novo.
+    await redis.hset(key, field, value);
+    await redis.hexpire(key, READ_MODEL_TTL_SECONDS, 'FIELDS', 1, field);
+  } else {
+    // O campo mantido conserva o prazo original (NX: só define prazo se ainda não houver).
+    await redis.hsetnx(key, field, value);
+    await redis.hexpire(key, READ_MODEL_TTL_SECONDS, 'NX', 'FIELDS', 1, field);
+  }
+}
+
+async function readFieldsAdoptingLegacy<T>(redis: Redis, key: string, timestampOf: (value: T) => string, now: Date): Promise<T[]> {
+  const entries = Object.entries(await redis.hgetall(key));
+  if (entries.length === 0) return [];
+  const ttls = await redis.httl(key, 'FIELDS', entries.length, ...entries.map(([field]) => field));
+  const kept: T[] = [];
+  for (const [i, [field, raw]] of entries.entries()) {
+    const value = JSON.parse(raw) as T;
+    if (ttls[i] !== -1) {
+      kept.push(value);
+      continue;
+    }
+    const remaining = Math.ceil((Date.parse(timestampOf(value)) + READ_MODEL_TTL_SECONDS * SECOND_MS - now.getTime()) / SECOND_MS);
+    if (remaining <= 0 || Number.isNaN(remaining)) {
+      await redis.hdel(key, field);
+      continue;
+    }
+    await redis.hexpire(key, remaining, 'FIELDS', 1, field);
+    kept.push(value);
+  }
+  return kept;
+}
 
 // Compare-and-set atômico: só grava se a versão salva for a esperada.
 const SAVE_IF_VERSION = `
@@ -49,34 +94,39 @@ export class RedisConversationRepository implements ConversationRepository {
   }
 }
 
-/** Fila por estúdio: hash com os tickets e sorted set pela hora do pedido (mais antigo primeiro). */
+/**
+ * Fila por estúdio: um hash de tickets em que cada ticket tem o seu prazo. A ordem (mais antigo primeiro) sai do
+ * `requestedAt` do ticket; o sorted set antigo, sem prazo e com o telefone como membro, é apagado ao primeiro uso.
+ */
 export class RedisHandoffQueue implements HandoffQueue {
   constructor(
     private readonly redis: Redis,
     private readonly prefix = 'wba:handoffs:',
   ) {}
 
-  async enqueue(ticket: HandoffTicket): Promise<void> {
-    await this.redis
-      .multi()
-      .hset(`${this.prefix}${ticket.tenantId}:tickets`, ticket.conversationId, JSON.stringify(ticket))
-      .zadd(`${this.prefix}${ticket.tenantId}:order`, 'NX', Date.parse(ticket.requestedAt), ticket.conversationId)
-      .exec();
+  private ticketsKey(tenantId: string): string {
+    return `${this.prefix}${tenantId}:tickets`;
   }
 
-  async list(tenantId: string): Promise<readonly HandoffTicket[]> {
-    const ids = await this.redis.zrange(`${this.prefix}${tenantId}:order`, 0, -1);
-    if (ids.length === 0) return [];
-    const raw = await this.redis.hmget(`${this.prefix}${tenantId}:tickets`, ...ids);
-    return raw.flatMap((item) => (item ? [JSON.parse(item) as HandoffTicket] : []));
+  private async dropLegacyOrder(tenantId: string): Promise<void> {
+    await this.redis.del(`${this.prefix}${tenantId}:order`);
+  }
+
+  async enqueue(ticket: HandoffTicket): Promise<void> {
+    await this.dropLegacyOrder(ticket.tenantId);
+    // O primeiro pedido vale: reenfileirar a mesma conversa não muda a posição nem o prazo.
+    await setFieldWithTtl(this.redis, this.ticketsKey(ticket.tenantId), ticket.conversationId, JSON.stringify(ticket), 'keep-first');
+  }
+
+  async list(tenantId: string, now = new Date()): Promise<readonly HandoffTicket[]> {
+    await this.dropLegacyOrder(tenantId);
+    const tickets = await readFieldsAdoptingLegacy<HandoffTicket>(this.redis, this.ticketsKey(tenantId), (t) => t.requestedAt, now);
+    return tickets.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
   }
 
   async remove(tenantId: string, conversationId: string): Promise<void> {
-    await this.redis
-      .multi()
-      .hdel(`${this.prefix}${tenantId}:tickets`, conversationId)
-      .zrem(`${this.prefix}${tenantId}:order`, conversationId)
-      .exec();
+    await this.dropLegacyOrder(tenantId);
+    await this.redis.hdel(this.ticketsKey(tenantId), conversationId);
   }
 }
 
@@ -91,16 +141,15 @@ export class RedisConversationLog implements ConversationLog {
     const timelineKey = `${this.prefix}${conversation.tenantId}:timeline:${conversation.id}`;
     const pipeline = this.redis.multi();
     if (entries.length > 0) {
-      pipeline.rpush(timelineKey, ...entries.map((e) => JSON.stringify(e))).ltrim(timelineKey, -TIMELINE_LIMIT, -1).expire(timelineKey, CONVERSATION_TTL_SECONDS);
+      pipeline.rpush(timelineKey, ...entries.map((e) => JSON.stringify(e))).ltrim(timelineKey, -TIMELINE_LIMIT, -1).expire(timelineKey, READ_MODEL_TTL_SECONDS);
     }
     await pipeline.exec();
     const timeline = await this.timeline(conversation.tenantId, conversation.id);
-    await this.redis.hset(`${this.prefix}${conversation.tenantId}:summaries`, conversation.id, JSON.stringify(summarize(conversation, timeline)));
+    await setFieldWithTtl(this.redis, `${this.prefix}${conversation.tenantId}:summaries`, conversation.id, JSON.stringify(summarize(conversation, timeline)), 'overwrite');
   }
 
-  async summaries(tenantId: string): Promise<readonly ConversationSummary[]> {
-    const raw = await this.redis.hvals(`${this.prefix}${tenantId}:summaries`);
-    return raw.map((item) => JSON.parse(item) as ConversationSummary);
+  async summaries(tenantId: string, now = new Date()): Promise<readonly ConversationSummary[]> {
+    return readFieldsAdoptingLegacy<ConversationSummary>(this.redis, `${this.prefix}${tenantId}:summaries`, (s) => s.updatedAt, now);
   }
 
   async timeline(tenantId: string, conversationId: string): Promise<readonly TimelineEntry[]> {

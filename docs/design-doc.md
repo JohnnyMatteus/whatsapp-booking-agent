@@ -158,7 +158,12 @@ Erro de domínio volta como resultado `isError` com `{codigo, mensagem, retentav
 | --- | --- | --- |
 | `wba:webhook:seen:<id>` | marca de idempotência do webhook (id da mensagem ou id + status) | 7 dias (janela de reentrega da Meta) |
 | `wba:conversation:<tenant>:<contato>` | snapshot JSON da Conversa com `version` (compare-and-set em Lua) | 30 dias |
-| `wba:handoffs:<tenant>:tickets` / `:order` | fila de atendimento (hash + sorted set por hora do pedido) | até a devolução ao bot |
+| `wba:handoffs:<tenant>:tickets` | fila de atendimento: um hash por estúdio, com a ordem pelo `requestedAt` do ticket | por ticket (campo), 30 dias menos 1 hora, ou até a devolução ao bot |
+| `wba:log:<tenant>:summaries` | resumo de cada conversa para a fila do painel (hash por estúdio) | por conversa (campo), 30 dias menos 1 hora |
+| `wba:log:<tenant>:timeline:<conversa>` | linha do tempo da conversa (lista limitada a 200) | 30 dias menos 1 hora, desde a última atividade da própria conversa |
+| `wba:media-notes:<tenant>:<mensagem>` | desfecho do processamento da mídia da mensagem | 30 dias por chave |
+
+Os resumos e tickets usam prazo por campo de hash (`HEXPIRE`, Redis 7.4 ou mais novo): a atividade de uma conversa não renova o prazo de outra e nada com telefone ou prévia de mensagem sobrevive a 30 dias. Eles expiram uma hora antes da conversa, então o item que a fila lista sempre tem detalhe. Campos gravados por versões anteriores, sem prazo, ganham o prazo que teriam tido (ou são apagados, se já o passaram) na primeira leitura; o sorted set `:order` antigo é apagado no primeiro uso.
 
 ## 5. Fluxos principais
 
