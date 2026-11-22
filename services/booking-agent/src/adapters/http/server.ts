@@ -1,6 +1,7 @@
 // API interna do painel do estúdio: fila, conversa com contexto, resposta do atendente,
-// devolução ao bot, métricas e política de escopo. Autenticação provisória por token
-// injetado pelo proxy do painel (ADR 0004); a integração com o Keycloak do SaaS é próximo passo.
+// devolução ao bot, métricas e política de escopo. Cada rota /api exige o JWT do atendente (OIDC),
+// com o estúdio da URL igual ao do token e o papel mínimo da rota (ADR 0013). A rota /internal
+// é entre serviços e usa token de serviço.
 import type { Registry } from '@wba/observability';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
@@ -10,10 +11,11 @@ import type { PanelQueries, StatusFilter } from '../../application/panel-queries
 import type { ReplyAsAttendant } from '../../application/reply-as-attendant.js';
 import type { ResumeConversation } from '../../application/resume-conversation.js';
 import { scopeInfo } from '../../application/scope-info.js';
+import { hasRole, Unauthenticated, type Principal, type Role, type TokenVerifier } from './auth.js';
 import { isDomainError, type DomainErrorCode } from '../../domain/errors.js';
 
 export interface PanelApiDeps {
-  readonly token: string;
+  readonly verifier: TokenVerifier;
   /** Token da rota interna de avisos, chamada pelo SaaS (sem passar pelo proxy do painel). */
   readonly internalToken: string;
   readonly queries: PanelQueries;
@@ -36,6 +38,8 @@ const STATUS_BY_CODE: Partial<Record<DomainErrorCode, number>> = {
   class_session_started: 409,
 };
 
+const PUBLIC_ROUTES: ReadonlySet<string> = new Set(['/healthz', '/metrics']);
+
 const MessageBody = z.object({ text: z.string().trim().min(1).max(4096) });
 const NoticeBody = z.object({
   contactId: z.string().min(1),
@@ -46,8 +50,6 @@ const NoticeBody = z.object({
 const StatusQuery = z.enum(['handed_off', 'bot_active', 'all']).default('all');
 const DaysQuery = z.coerce.number().int().min(1).max(30).default(7);
 
-const PUBLIC_ROUTES: ReadonlySet<string> = new Set(['/healthz', '/metrics']);
-
 function equalToken(received: string | undefined, token: string): boolean {
   const expected = Buffer.from(`Bearer ${token}`);
   const actual = Buffer.from(received ?? '');
@@ -57,12 +59,29 @@ function equalToken(received: string | undefined, token: string): boolean {
 export function buildPanelApi(deps: PanelApiDeps): FastifyInstance {
   const app = Fastify({ logger: false });
 
+  // A política é decidida pelo padrão da rota que o roteador casou (`routeOptions.url`), nunca pela URL
+  // crua: o roteador decodifica o caminho (`/%61pi` casa `/api`), e decidir pela string do cliente abriria
+  // um desvio. Falha fechado: só /healthz e /metrics são públicos; /api exige o JWT do atendente (estúdio
+  // da URL = estúdio do token, papel mínimo da rota); /internal exige o token de serviço; qualquer outra
+  // rota casada, sem política, é recusada. Caminho que não casa rota cai no 404, que não toca em dados.
   app.addHook('onRequest', async (request, reply) => {
-    // A rota casada, não request.url: o roteador decodifica o caminho (/%61pi/... cai em /api/...).
     const route = request.routeOptions.url;
     if (route === undefined || PUBLIC_ROUTES.has(route)) return;
-    const token = route.startsWith('/internal/') ? deps.internalToken : deps.token;
-    if (!equalToken(request.headers.authorization, token)) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
+    if (route.startsWith('/internal/')) {
+      if (!equalToken(request.headers.authorization, deps.internalToken)) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
+      return;
+    }
+    if (!route.startsWith('/api/')) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
+    let principal: Principal;
+    try {
+      principal = await deps.verifier.verify(request.headers.authorization);
+    } catch (error) {
+      if (error instanceof Unauthenticated) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
+      throw error;
+    }
+    const tenantId = (request.params as { tenantId?: string }).tenantId;
+    const required = (request.routeOptions.config as { role?: Role }).role ?? 'attendant';
+    if (tenantId !== principal.tenantId || !hasRole(principal, required)) return reply.code(403).send({ error: 'acesso negado', code: 'forbidden' });
   });
 
   const fail = (reply: FastifyReply, error: unknown) => {
@@ -118,7 +137,7 @@ export function buildPanelApi(deps: PanelApiDeps): FastifyInstance {
     }
   });
 
-  app.get<{ Params: { tenantId: string }; Querystring: { days?: string } }>('/api/tenants/:tenantId/metrics', async (request, reply) => {
+  app.get<{ Params: { tenantId: string }; Querystring: { days?: string } }>('/api/tenants/:tenantId/metrics', { config: { role: 'manager' satisfies Role } }, async (request, reply) => {
     const days = DaysQuery.safeParse(request.query.days);
     if (!days.success) return invalid(reply);
     return deps.queries.metrics(request.params.tenantId, days.data);

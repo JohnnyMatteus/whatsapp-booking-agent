@@ -158,20 +158,35 @@ jobs:
           persist-credentials: false
       - name: Imagem Docker
         run: docker build -t whatsapp-booking-agent/api-gateway:ci infra/gateway
-      - name: kong config parse
+      - name: Par de chaves de teste do painel
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          openssl genrsa -out "$RUNNER_TEMP/keys/private.pem" 2048
+          openssl rsa -in "$RUNNER_TEMP/keys/private.pem" -pubout -out "$RUNNER_TEMP/keys/public.pem"
+          chmod -R a+rX "$RUNNER_TEMP/keys"
+      - name: kong config parse (o entrypoint renderiza o kong.yaml com a chave pública)
         run: |
           set -o pipefail
           {
-            sed -e 's|__PANEL_API_TOKEN__|dev-only-panel-token|g' -e 's|__PANEL_JWT_SECRET__|dev-only-panel-jwt-secret-change-me|g' infra/gateway/kong.yaml > "$RUNNER_TEMP/kong.yaml"
-            docker run --rm --entrypoint kong -e KONG_DATABASE=off -v "$RUNNER_TEMP/kong.yaml:/tmp/kong.yaml:ro" whatsapp-booking-agent/api-gateway:ci config parse /tmp/kong.yaml
+            docker run --rm --entrypoint sh -e KONG_DATABASE=off -e RENDER_ONLY=1 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e PANEL_JWT_PUBLIC_KEY_FILE=/keys/public.pem -v "$RUNNER_TEMP/keys:/keys:ro" whatsapp-booking-agent/api-gateway:ci -c '/kong/entrypoint.sh && kong config parse /tmp/kong.rendered.yaml'
           } 2>&1 | tee "$RUNNER_TEMP/kong-config.log"
-      - name: Smoke das políticas (JWT, webhooks sem JWT, rotas internas fora, limite de corpo)
+      - name: O entrypoint recusa chave pública ausente, vazia ou fora do formato
+        run: |
+          : > "$RUNNER_TEMP/keys/empty.pem"
+          echo lixo > "$RUNNER_TEMP/keys/garbage.pem"
+          chmod a+r "$RUNNER_TEMP/keys/empty.pem" "$RUNNER_TEMP/keys/garbage.pem"
+          for key in empty.pem garbage.pem missing.pem; do
+            if docker run --rm --entrypoint sh -e RENDER_ONLY=1 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e "PANEL_JWT_PUBLIC_KEY_FILE=/keys/$key" -v "$RUNNER_TEMP/keys:/keys:ro" whatsapp-booking-agent/api-gateway:ci -c '/kong/entrypoint.sh'; then
+              echo "FALHA o entrypoint aceitou $key"; exit 1
+            fi
+          done
+      - name: Smoke das políticas (JWT RS256, webhooks sem JWT, rotas internas fora, limite de corpo)
         run: |
           set -o pipefail
           {
-            docker run -d --name gw -p 8000:8000 -e PANEL_API_TOKEN=dev-only-panel-token -e PANEL_JWT_SECRET=dev-only-panel-jwt-secret-change-me whatsapp-booking-agent/api-gateway:ci
+            docker run -d --name gw -p 8000:8000 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e PANEL_JWT_PUBLIC_KEY_FILE=/keys/public.pem -v "$RUNNER_TEMP/keys:/keys:ro" whatsapp-booking-agent/api-gateway:ci
             for i in $(seq 1 30); do docker exec gw kong health >/dev/null 2>&1 && break; sleep 2; done
-            infra/gateway/smoke.sh http://127.0.0.1:8000 || { docker logs gw; exit 1; }
+            PANEL_JWT_PRIVATE_KEY_FILE="$RUNNER_TEMP/keys/private.pem" infra/gateway/smoke.sh http://127.0.0.1:8000 || { docker logs gw; exit 1; }
           } 2>&1 | tee "$RUNNER_TEMP/smoke.log"
       - name: Diagnóstico dos passos que falharam
         if: failure()

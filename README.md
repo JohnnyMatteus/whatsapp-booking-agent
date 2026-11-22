@@ -81,16 +81,17 @@ make up-llm           # opcional: Ollama local e o modelo do LLM_MODEL
 make seed             # envia ao webhook (via api-gateway) uma mensagem assinada como a Meta
 make up-whatsmiau     # opcional: estudio-sol atendido pelo Whatsmiau (mock) e estudio-lotus na Cloud API
 make seed-whatsmiau   # mensagem no formato do Whatsmiau, com o segredo da instância
-make panel-jwt        # JWT de desenvolvimento do painel (o compose já traz um)
+make panel-token      # access token de desenvolvimento do Keycloak (USER_NAME=ana.lotus|bia.lotus|caio.sol)
 make seed TEXT="me conta uma piada"
 ```
 
 | Endereço | O quê |
 | --- | --- |
 | http://127.0.0.1:8000/webhooks/cloud-api · /webhooks/whatsmiau | api-gateway: webhooks dos provedores (sem JWT; a autenticidade é validada no messaging-gateway) |
-| http://127.0.0.1:8000/api | api-gateway: API do painel (exige JWT); `make gateway-smoke` confere as políticas |
+| http://127.0.0.1:8000/api | api-gateway: API do painel (exige o JWT do Keycloak; o booking-agent não tem porta no host); o smoke das políticas roda no CI |
 | http://127.0.0.1:9090/__admin/requests | respostas que o bot "enviou" ao mock da Cloud API |
-| http://127.0.0.1:5173 | painel do estúdio (Recado) |
+| http://127.0.0.1:5173 | painel do estúdio (Recado); entra pelo Keycloak (`ana.lotus@example.com` / `dev-only-ana`) |
+| http://127.0.0.1:8180 | Keycloak de desenvolvimento (realm `wba`) |
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
@@ -132,6 +133,7 @@ O CI ([`ci.yml`](.github/workflows/ci.yml)) roda um job por serviço, mais os te
 | [0010](docs/adr/0010-messaging-gateway-e-provedores-de-whatsapp.md) | Messaging-gateway: porta `MessagingProvider`, Cloud API e Whatsmiau por estúdio, riscos do Whatsmiau e quando usar cada um |
 | [0011](docs/adr/0011-media-processor.md) | Media-processor: valida por bytes, guarda no S3, miniatura, transcrição, `MediaProcessed` |
 | [0012](docs/adr/0012-api-gateway-kong.md) | Kong DB-less: webhooks sem JWT (assinatura no serviço), painel com JWT, rate limit |
+| [0013](docs/adr/0013-login-do-painel-oidc.md) | Login do painel por OIDC (Keycloak, PKCE); estúdio e papel vêm do token, validados no gateway e no booking-agent |
 
 Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteiros/escopo-e-recusas.md), [transferência para humano](docs/roteiros/transferencia-para-humano.md) e [modelo de domínio](docs/roteiros/modelo-dominio-agendamento.md).
 
@@ -151,7 +153,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 6. media-processor com retry, DLQ, métricas e teste de integração com MinIO; painel exibindo miniaturas a partir de `media.processed`.
 7. Testes de mutação no domínio e de carga no webhook no CI.
 8. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); mapeamento de JIDs `@lid`.
-9. Painel com login OIDC e JWT RS256 por consumidor no Kong (hoje HS256 de desenvolvimento), conversas e métricas de atendimento; deploy com Helm atrás do `platform-edge`.
+9. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes) e rotação da chave pública no Kong; deploy com Helm atrás do `platform-edge`.
 
 ## Licença
 

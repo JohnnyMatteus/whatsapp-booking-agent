@@ -3,6 +3,7 @@ import { Queues } from '@wba/contracts/topology';
 import { RabbitMqBus } from '@wba/messaging';
 import { createLogger, createMetricsRegistry, setupTracing } from '@wba/observability';
 import { Redis } from 'ioredis';
+import { createJwtVerifier, remoteKeys } from './adapters/http/auth.js';
 import { buildPanelApi } from './adapters/http/server.js';
 import { OpenAiCompatibleClient } from './adapters/llm/openai-compatible.js';
 import { connectMcp } from './adapters/mcp/connect.js';
@@ -76,7 +77,7 @@ const reminderTimer = setInterval(() => {
 }, config.REMINDER_INTERVAL_MS);
 
 const api = buildPanelApi({
-  token: config.PANEL_API_TOKEN,
+  verifier: createJwtVerifier({ issuer: config.OIDC_ISSUER, audience: config.OIDC_AUDIENCE, keys: remoteKeys(config.OIDC_JWKS_URL) }),
   internalToken: config.INTERNAL_API_TOKEN,
   queries: new PanelQueries({ conversations, log, metrics: metricsStore, clock, timezone: config.STUDIO_TIMEZONE }),
   reply: new ReplyAsAttendant({ conversations, publisher, log, metrics: recorder, clock }),

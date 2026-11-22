@@ -1,5 +1,5 @@
 # Ambiente local do whatsapp-booking-agent (ADR 0007).
-#   core:          api-gateway, serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
+#   core:          api-gateway, Keycloak (login do painel), serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
 #   whatsmiau:     mock do Whatsmiau (provedor alternativo, ADR 0010); troque TENANT_CHANNELS para usá-lo
 #   observability: Prometheus, Jaeger e Grafana
 #   llm:           Ollama para o LLM local (opcional; qualquer API compatível com OpenAI serve)
@@ -14,6 +14,10 @@ x-node-service: &node-service
     REDIS_URL: redis://redis:6379
     LOG_LEVEL: ${LOG_LEVEL:-info}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+# Login do painel (ADR 0013). O emissor é o endereço que o navegador enxerga; os serviços buscam as chaves
+# pelo nome interno do Keycloak.
+x-oidc-issuer: &oidc-issuer ${OIDC_ISSUER:-http://127.0.0.1:8180/realms/wba}
 
 x-gateway-env: &gateway-env
   <<: *common-env
@@ -133,6 +137,32 @@ services:
       retries: 20
       start_period: 20s
 
+  # Provedor de identidade do painel. O realm `wba` é importado de infra/keycloak (usuários e chave de
+  # desenvolvimento, sem valor fora daqui); em produção use um Keycloak com realm e chaves próprios.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.0
+    profiles: [core]
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-dev-only-change-me}
+      KC_HOSTNAME: http://127.0.0.1:${KEYCLOAK_PORT:-8180}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-8180}:8080"
+    volumes:
+      - ./infra/keycloak/wba-realm.json:/opt/keycloak/data/import/wba-realm.json:ro
+    networks: [booking-net]
+    healthcheck:
+      # A imagem não traz curl: teste TCP na porta de gerenciamento (9000) lendo o /health/ready.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
   # Mock da API do SaaS para rodar sem o saas-multitenant (o override do portfólio troca pelo real).
   saas-mock:
     image: wiremock/wiremock:3.13.2
@@ -200,8 +230,9 @@ services:
     profiles: [core]
     restart: unless-stopped
     environment:
-      PANEL_API_TOKEN: ${PANEL_API_TOKEN:-dev-only-panel-token}
-      PANEL_JWT_SECRET: ${PANEL_JWT_SECRET:-dev-only-panel-jwt-secret-change-me}
+      OIDC_ISSUER: *oidc-issuer
+      # A chave pública do realm é lida do Keycloak ao subir; sem ela o gateway não sobe.
+      OIDC_REALM_URL: http://keycloak:8080/realms/wba
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8000}:8000"
     networks: [booking-net]
@@ -209,6 +240,8 @@ services:
       messaging-webhook:
         condition: service_healthy
       booking-agent:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "kong", "health"]
@@ -254,12 +287,13 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-dev-only-ollama}
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:3b-instruct}
       STUDIO_TIMEZONE: ${STUDIO_TIMEZONE:-America/Sao_Paulo}
-      PANEL_API_TOKEN: ${PANEL_API_TOKEN:-dev-only-panel-token}
+      OIDC_ISSUER: *oidc-issuer
+      OIDC_AUDIENCE: wba-api
+      OIDC_JWKS_URL: http://keycloak:8080/realms/wba/protocol/openid-connect/certs
       # Rota /internal (avisos por template), chamada pelo SaaS; o proxy do painel não a expõe.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-only-internal-token}
       REMINDER_TENANTS: ${REMINDER_TENANTS:-estudio-lotus}
-    ports:
-      - "127.0.0.1:${BOOKING_AGENT_PORT:-8081}:8081"
+    # Sem porta publicada no host: o painel só entra pelo api-gateway, que valida o JWT.
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -304,14 +338,18 @@ services:
     profiles: [core]
     restart: unless-stopped
     environment:
-      # O painel fala só com o api-gateway, que valida o JWT (token de desenvolvimento, sem expiração).
-      BOOKING_AGENT_URL: http://api-gateway:8000
-      PANEL_JWT: ${PANEL_JWT:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ3YmEtcGFuZWwiLCJzdWIiOiJwYWluZWwifQ.b4tbYwGZ2cgvEaj-VkoCx5QZUQdTcK09BEMgmSKxYRs}
+      # O painel fala só com o api-gateway e entra com o Keycloak (authorization code + PKCE no navegador).
+      # Nenhum token mora no servidor do painel: o nginx repassa o Authorization do navegador.
+      GATEWAY_URL: http://api-gateway:8000
+      OIDC_ISSUER: *oidc-issuer
+      OIDC_CLIENT_ID: wba-panel
     ports:
       - "127.0.0.1:${WEB_PORT:-5173}:8080"
     networks: [booking-net]
     depends_on:
       api-gateway:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]

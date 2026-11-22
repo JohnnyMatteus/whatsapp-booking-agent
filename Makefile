@@ -2,7 +2,7 @@
 COMPOSE := docker compose
 PROFILES := --profile core --profile observability
 
-.PHONY: help network install up up-llm up-whatsmiau seed-whatsmiau panel-jwt gateway-smoke up-portfolio down logs ps seed notify lint test test-integration build clean
+.PHONY: help network install up up-llm up-whatsmiau seed-whatsmiau panel-token gateway-smoke up-portfolio down logs ps seed notify lint test test-integration build clean
 
 help: ## Lista os alvos
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-17s %s\n", $$1, $$2}'
@@ -44,10 +44,10 @@ seed: ## Envia ao webhook uma mensagem de exemplo assinada (TEXT="...")
 seed-whatsmiau: ## Envia ao webhook do Whatsmiau uma mensagem de exemplo com o segredo da instância (TEXT="...")
 	./scripts/seed-whatsmiau.sh "$${TEXT:-Quais horários tem amanhã?}"
 
-panel-jwt: ## Gera um JWT de desenvolvimento para o painel (TTL em segundos; 0 = sem exp)
-	./scripts/mint-panel-jwt.sh $${TTL:-0}
+panel-token: ## Access token de desenvolvimento do Keycloak (USER_NAME=ana.lotus, bia.lotus ou caio.sol)
+	./scripts/panel-token.sh $${USER_NAME:-ana.lotus}
 
-gateway-smoke: ## Smoke das políticas do api-gateway já no ar (GATEWAY_PORT, padrão 8000)
+gateway-smoke: ## Smoke do api-gateway de que você tem o par de chaves (PANEL_JWT_PRIVATE_KEY_FILE); o CI usa um descartável
 	./infra/gateway/smoke.sh http://127.0.0.1:$${GATEWAY_PORT:-8000}
 
 notify: ## Pede um aviso por template (KIND=reminder|promotion, CONTACT, SESSION, DATE=AAAA-MM-DD)

@@ -27,7 +27,7 @@ make test              # unitários e de contrato (rápidos, sem Docker)
 make test-integration  # testcontainers (deixe para o CI)
 make build             # bundles Node, painel e binário Go
 make up / make down / make logs / make ps / make seed / make clean
-make up-whatsmiau / make seed-whatsmiau / make panel-jwt / make gateway-smoke
+make up-whatsmiau / make seed-whatsmiau / make panel-token / make gateway-smoke
 docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
 ```
 

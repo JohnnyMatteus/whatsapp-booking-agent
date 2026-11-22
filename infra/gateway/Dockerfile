@@ -4,6 +4,7 @@ FROM kong:3.9.1
 
 COPY kong.yaml /kong/declarative/kong.yaml
 COPY entrypoint.sh /kong/entrypoint.sh
+COPY fetch-realm-key.lua /kong/fetch-realm-key.lua
 
 ENV KONG_DATABASE=off \
     KONG_PROXY_LISTEN="0.0.0.0:8000" \

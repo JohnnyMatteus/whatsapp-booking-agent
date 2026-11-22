@@ -51,8 +51,9 @@ services:
               size_unit: megabytes
               require_content_length: false
 
-  # API do painel. O JWT é validado aqui; o booking-agent continua recebendo o seu token de
-  # serviço, injetado pelo gateway (o token do painel não chega ao navegador nem ao upstream).
+  # API do painel. O JWT do atendente (emitido pelo Keycloak, RS256) é validado aqui: assinatura,
+  # emissor e expiração. O Authorization segue intacto para o booking-agent, que valida de novo e é
+  # quem decide estúdio e papel a partir do token (ADR 0013).
   - name: booking-agent-panel
     protocol: http
     host: booking-agent
@@ -73,8 +74,8 @@ services:
               uri_param_names: []
               cookie_names: []
               key_claim_name: iss
-              # Em desenvolvimento o token do painel não expira (ver scripts/mint-panel-jwt.sh).
-              # Produção: claims_to_verify [exp] e maximum_expiration, com o IdP emitindo (ADR 0012).
+              claims_to_verify: [exp]
+              maximum_expiration: 3600
               run_on_preflight: false
           - name: rate-limiting
             config:
@@ -90,21 +91,17 @@ services:
               allowed_payload_size: 64
               size_unit: kilobytes
               require_content_length: false
-          - name: request-transformer
-            config:
-              remove:
-                headers: [authorization]
-              add:
-                headers: ["Authorization:Bearer __PANEL_API_TOKEN__"]
 
 # Não há rota para /internal (mídia e avisos): são APIs entre serviços, só na rede interna.
 
 consumers:
+  # Um consumidor para o realm: a chave é o emissor (claim iss) e a pública vem do Keycloak.
   - username: painel
     jwt_secrets:
-      - key: wba-panel
-        algorithm: HS256
-        secret: "__PANEL_JWT_SECRET__"
+      - key: "__OIDC_ISSUER__"
+        algorithm: RS256
+        rsa_public_key: |
+          __PANEL_JWT_PUBLIC_KEY__
 
 plugins:
   - name: prometheus

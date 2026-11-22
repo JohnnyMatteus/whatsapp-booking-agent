@@ -2,10 +2,18 @@ server {
   listen 8080;
   root /usr/share/nginx/html;
 
+  # O Authorization do navegador segue para o api-gateway sem alteração: o painel não guarda token
+  # no servidor (ADR 0013).
   location /api/ {
-    proxy_pass ${BOOKING_AGENT_URL};
-    proxy_set_header Authorization "Bearer ${PANEL_JWT}";
+    proxy_pass ${GATEWAY_URL};
     proxy_set_header Host $host;
+  }
+
+  # Configuração pública do login (emissor e client id), lida pelo SPA ao iniciar.
+  location = /config.json {
+    default_type application/json;
+    add_header Cache-Control "no-store";
+    return 200 '{"issuer":"${OIDC_ISSUER}","clientId":"${OIDC_CLIENT_ID}"}';
   }
 
   location /healthz {

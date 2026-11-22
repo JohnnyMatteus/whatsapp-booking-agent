@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Gera um JWT HS256 de desenvolvimento para o painel (iss=wba-panel), assinado com o segredo que
-# o api-gateway valida. Em produção quem emite é o provedor de identidade (ADR 0012).
-# Uso: PANEL_JWT_SECRET=... scripts/mint-panel-jwt.sh [segundos-de-validade]  (0 = sem exp)
+# Gera um JWT RS256 de teste com a chave privada indicada. Serve ao smoke do api-gateway (CI), onde o
+# Kong recebe a chave pública correspondente; em uso normal quem emite é o Keycloak (scripts/panel-token.sh).
+# Uso: scripts/mint-panel-jwt.sh <chave-privada.pem> [segundos-de-validade] [iss] [tenant] [role]
 set -euo pipefail
 
-SECRET="${PANEL_JWT_SECRET:-dev-only-panel-jwt-secret-change-me}"
-TTL="${1:-0}"
+KEY="${1:?informe a chave privada PEM}"
+TTL="${2:-300}"
+ISS="${3:-http://127.0.0.1:8180/realms/wba}"
+TENANT="${4:-estudio-lotus}"
+ROLE="${5:-attendant}"
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
-HEADER=$(printf '{"alg":"HS256","typ":"JWT"}' | b64url)
-if [ "$TTL" -gt 0 ]; then
-  PAYLOAD=$(printf '{"iss":"wba-panel","sub":"painel","exp":%s}' "$(( $(date +%s) + TTL ))" | b64url)
-else
-  PAYLOAD=$(printf '{"iss":"wba-panel","sub":"painel"}' | b64url)
-fi
-SIGNATURE=$(printf '%s.%s' "$HEADER" "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -binary | b64url)
+NOW=$(date +%s)
+HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+PAYLOAD=$(printf '{"iss":"%s","sub":"smoke","aud":"wba-api","iat":%s,"exp":%s,"realm_access":{"roles":["%s","tenant:%s"]}}' "$ISS" "$NOW" "$(( NOW + TTL ))" "$ROLE" "$TENANT" | b64url)
+SIGNATURE=$(printf '%s.%s' "$HEADER" "$PAYLOAD" | openssl dgst -sha256 -sign "$KEY" -binary | b64url)
 printf '%s.%s.%s\n' "$HEADER" "$PAYLOAD" "$SIGNATURE"
