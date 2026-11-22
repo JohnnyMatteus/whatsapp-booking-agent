@@ -95,6 +95,8 @@ make seed TEXT="me conta uma piada"
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
+O api-gateway lê a chave pública do Keycloak só ao subir: se o Keycloak gerar outro par (volume `keycloak-data` apagado por `make clean`), todo token dá 401 até `docker compose restart api-gateway`.
+
 Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas com datas relativas a hoje. Para usar o SaaS real pela rede compartilhada do portfólio: `make network && make up-portfolio`.
 
 ## Como testar
