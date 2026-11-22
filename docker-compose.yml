@@ -80,8 +80,9 @@ services:
       - ./infra/localstack/init-s3.sh:/etc/localstack/init/ready.d/10-media-bucket.sh:ro
     networks: [booking-net]
     healthcheck:
-      # Pronto = estágio READY concluído e nenhum script de init em erro (o do bucket entre eles).
-      test: ["CMD-SHELL", "out=$$(curl -fsS http://127.0.0.1:4566/_localstack/init/ready) && echo \"$$out\" | grep -Eq '\"READY\": ?true' && ! echo \"$$out\" | grep -q '\"ERROR\"'"]
+      # /init/ready devolve "completed": true e o estado de cada script (fonte do LocalStack v4.4.0).
+      # Pronto = estágio concluído, script do bucket executado e nenhum em erro.
+      test: ["CMD-SHELL", "out=$$(curl -fsS http://127.0.0.1:4566/_localstack/init/ready) && echo \"$$out\" | grep -Eq '\"completed\": ?true' && echo \"$$out\" | grep -q '\"SUCCESSFUL\"' && ! echo \"$$out\" | grep -q '\"ERROR\"'"]
       interval: 5s
       timeout: 5s
       retries: 20
