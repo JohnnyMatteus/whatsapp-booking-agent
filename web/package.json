@@ -2,7 +2,7 @@
   "name": "@wba/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Painel do estúdio: fila de atendimento humano (esqueleto). Vue 3, Vuetify e TanStack Query.",
+  "description": "Painel do estúdio: conversas, atendimento humano, métricas e escopo. Vue 3, Vuetify e TanStack Query.",
   "type": "module",
   "license": "MIT",
   "scripts": {
