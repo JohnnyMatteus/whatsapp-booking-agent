@@ -115,11 +115,12 @@ describe('Redis', () => {
     const [ttl] = await redis.httl(OUTBOX_ENTRIES_KEY, 'FIELDS', 1, 'entrada-a');
     expect(ttl).toBeGreaterThan(OUTBOX_ENTRY_TTL_SECONDS - 60);
 
-    expect(await outbox.claim('entrada-a', 30)).toBe(true);
-    expect(await outbox.claim('entrada-a', 30)).toBe(false);
+    expect((await outbox.claim('entrada-a', 30))?.id).toBe('entrada-a');
+    expect(await outbox.claim('entrada-a', 30)).toBeNull();
     await outbox.complete('entrada-a');
     expect((await outbox.pending(100)).map((e) => e.id)).not.toContain('entrada-a');
-    expect(await outbox.claim('entrada-a', 30)).toBe(true);
+    // Concluída: não há mais o que reservar, mesmo com a reserva liberada.
+    expect(await outbox.claim('entrada-a', 30)).toBeNull();
   });
 
   it('outbox no Redis: entrada concluída durante a varredura não é republicada, com varredores e turno concorrentes', async () => {
