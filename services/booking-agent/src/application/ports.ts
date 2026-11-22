@@ -113,6 +113,8 @@ export interface MediaNote {
 export interface MediaNotes {
   save(tenantId: string, messageId: string, note: MediaNote): Promise<void>;
   find(tenantId: string, messageId: string): Promise<MediaNote | null>;
+  /** Só as mensagens que têm anotação; uma ida ao armazenamento para a linha do tempo inteira. */
+  findMany(tenantId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, MediaNote>>;
 }
 
 /** Miniaturas guardadas pelo media-processor (baixadas pela API interna dele). */

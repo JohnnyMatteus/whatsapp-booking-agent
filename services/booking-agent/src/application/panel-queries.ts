@@ -110,14 +110,14 @@ export class PanelQueries {
   }
 
   private async withMedia(tenantId: string, timeline: readonly TimelineEntry[]): Promise<readonly TimelineEntry[]> {
-    return Promise.all(
-      timeline.map(async (entry) => {
-        if (entry.kind !== 'student') return entry;
-        const note = await this.deps.mediaNotes.find(tenantId, entry.messageId);
-        const media = note ? { kind: note.kind, status: note.status, rejectionReason: note.rejectionReason, hasThumbnail: note.thumbnailKey !== null } : null;
-        return { ...entry, media };
-      }),
-    );
+    const messageIds = timeline.flatMap((entry) => (entry.kind === 'student' ? [entry.messageId] : []));
+    const notes = await this.deps.mediaNotes.findMany(tenantId, messageIds);
+    return timeline.map((entry) => {
+      if (entry.kind !== 'student') return entry;
+      const note = notes.get(entry.messageId);
+      const media = note ? { kind: note.kind, status: note.status, rejectionReason: note.rejectionReason, hasThumbnail: note.thumbnailKey !== null } : null;
+      return { ...entry, media };
+    });
   }
 
   async metrics(tenantId: string, days: number): Promise<MetricsReport> {

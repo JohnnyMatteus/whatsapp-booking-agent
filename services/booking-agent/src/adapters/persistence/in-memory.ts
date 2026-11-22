@@ -109,4 +109,11 @@ export class InMemoryMediaNotes implements MediaNotes {
   async find(tenantId: string, messageId: string): Promise<MediaNote | null> {
     return this.notes.get(`${tenantId}\u0000${messageId}`) ?? null;
   }
+
+  async findMany(tenantId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, MediaNote>> {
+    return new Map(messageIds.flatMap((id) => {
+      const note = this.notes.get(`${tenantId}\u0000${id}`);
+      return note ? [[id, note] as const] : [];
+    }));
+  }
 }
