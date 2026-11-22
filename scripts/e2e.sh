@@ -39,12 +39,13 @@ before="$(sent_count)"
 
 echo "== webhook da Cloud API"
 ID="wamid.E2E$(date +%s)$RANDOM"
-MESSAGE_ID="$ID" "$HERE/seed-webhook.sh" "Quais horários tem amanhã?" >/dev/null && ok "webhook assinado aceito" || bad "webhook assinado aceito"
+if MESSAGE_ID="$ID" "$HERE/seed-webhook.sh" "Quais horários tem amanhã?" >/dev/null; then ok "webhook assinado aceito"; else bad "webhook assinado aceito"; fi
+# shellcheck disable=SC2329  # chamada indiretamente, por wait_until
 reply_arrived() { [ "$(sent_count)" -gt "$before" ]; }
 wait_until "a resposta do bot chega ao mock da Cloud API" 45 reply_arrived || true
 after="$(sent_count)"
 
-MESSAGE_ID="$ID" "$HERE/seed-webhook.sh" "Quais horários tem amanhã?" >/dev/null && ok "reentrega aceita (200)" || bad "reentrega aceita (200)"
+if MESSAGE_ID="$ID" "$HERE/seed-webhook.sh" "Quais horários tem amanhã?" >/dev/null; then ok "reentrega aceita (200)"; else bad "reentrega aceita (200)"; fi
 sleep 6
 expect "a reentrega do mesmo id não gera segunda resposta" "$after" "$(sent_count)"
 
@@ -68,13 +69,18 @@ expect "gerente vê métricas" 200 "$(api "$BIA" /api/tenants/estudio-lotus/metr
 expect "gerente de outro estúdio não vê métricas" 403 "$(api "$CAIO" /api/tenants/estudio-lotus/metrics)"
 
 LIST="$(curl -fsS -H "Authorization: Bearer $ANA" "$GATEWAY/api/tenants/estudio-lotus/conversations")"
-python3 - "$LIST" <<'PY' && ok "a conversa do webhook aparece na fila, com o contato mascarado" || bad "a conversa do webhook aparece na fila, com o contato mascarado"
+if python3 - "$LIST" <<'PY'
 import json, sys
 data = json.loads(sys.argv[1])
 ids = [c["conversationId"] for c in data["data"]]
 assert "estudio-lotus:5511900000001" in ids, ids
 assert all("5511900000001" not in c.get("contact", "") for c in data["data"])
 PY
+then
+  ok "a conversa do webhook aparece na fila, com o contato mascarado"
+else
+  bad "a conversa do webhook aparece na fila, com o contato mascarado"
+fi
 
 expect "API interna não tem rota no gateway" 404 "$(code -X POST -H 'Content-Type: application/json' -d '{}' "$GATEWAY/internal/tenants/estudio-lotus/notifications")"
 expect "API interna codificada não tem rota no gateway" 404 "$(code -X POST -H 'Content-Type: application/json' -d '{}' "$GATEWAY/%69nternal/tenants/estudio-lotus/notifications")"
