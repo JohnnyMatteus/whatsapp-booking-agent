@@ -77,6 +77,14 @@ export type MetaOutboundMessage = {
 } & (
   | { readonly type: 'text'; readonly text: { readonly body: string; readonly preview_url: false } }
   | {
+      readonly type: 'template';
+      readonly template: {
+        readonly name: string;
+        readonly language: { readonly code: string };
+        readonly components: readonly { readonly type: 'body'; readonly parameters: readonly { readonly type: 'text'; readonly text: string }[] }[];
+      };
+    }
+  | {
       readonly type: 'interactive';
       readonly interactive:
         | {

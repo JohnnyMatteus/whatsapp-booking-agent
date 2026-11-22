@@ -45,5 +45,7 @@ export function setup(options: { llm?: (string | object)[]; listing?: SessionLis
 }
 
 export function allText(reply: Reply): string {
-  return reply.kind === 'text' ? reply.text : [reply.body, ...reply.choices.map((c) => `${c.title} ${c.description ?? ''}`)].join(' | ');
+  if (reply.kind === 'text') return reply.text;
+  if (reply.kind === 'template') return reply.params.join(' | ');
+  return [reply.body, ...reply.choices.map((c) => `${c.title} ${c.description ?? ''}`)].join(' | ');
 }

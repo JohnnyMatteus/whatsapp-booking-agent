@@ -55,6 +55,8 @@ const AgentState = Annotation.Root({
   range: value<DateRange | null>(() => null),
   /** Aulas devolvidas pelas ferramentas neste turno. */
   slots: value<readonly OfferedSlot[]>(() => []),
+  /** Aulas que as respostas do turno citam (alimenta o carimbo de fonte do painel). */
+  cited: value<readonly OfferedSlot[]>(() => []),
   replies: value<readonly Reply[]>(() => []),
   handoffReason: value<HandoffReason | null>(() => null),
   failure: value<Failure | null>(() => null),
@@ -137,6 +139,7 @@ export function buildAgentGraph(deps: AgentDeps) {
       if (state.linkCode) {
         const { name } = await tools.linkContact(member(state), state.linkCode);
         conversation.recordSuccess();
+        conversation.markLinked(true);
         return { steps, replies: [replies.linked(name)], next: 'finalize' };
       }
       let update: Update;
@@ -161,10 +164,12 @@ export function buildAgentGraph(deps: AgentDeps) {
           break;
       }
       if (update.next !== 'fail') conversation.recordSuccess();
+      if (update.next !== 'fail' && state.intent !== 'greeting') conversation.markLinked(true);
       return { steps, ...update };
     } catch (error) {
       if (isDomainError(error) && !error.retryable) {
         conversation.recordSuccess();
+        if (error.code === 'contact_not_linked') conversation.markLinked(false);
         return { steps, replies: [replies.businessRejection(error.code)], next: 'finalize' };
       }
       return { steps, failure: 'unavailable', next: 'fail' };
@@ -172,21 +177,21 @@ export function buildAgentGraph(deps: AgentDeps) {
 
     async function offerToBook(): Promise<Update> {
       const slots = await listOffers(false);
-      return slots.length === 0 ? { replies: [replies.noSlots()], next: 'finalize' } : { slots, next: 'compose' };
+      return slots.length === 0 ? { replies: [replies.noSlots()], next: 'finalize' } : { slots, cited: slots, next: 'compose' };
     }
 
     async function offerCancellation(): Promise<Update> {
       const slots = await listOffers(true);
       return slots.length === 0
         ? { replies: [replies.noBookings()], next: 'finalize' }
-        : { slots, replies: [replies.cancellationChoices(slots)], next: 'finalize' };
+        : { slots, cited: slots, replies: [replies.cancellationChoices(slots)], next: 'finalize' };
     }
 
     async function book(sessionId: string): Promise<Update> {
       const slot = conversation.offeredSlot(sessionId, now);
-      if (sessionOf(slot).bookingOutcomeAt(now) === 'waitlist') return { replies: [replies.offerWaitlist(slot)], next: 'finalize' };
+      if (sessionOf(slot).bookingOutcomeAt(now) === 'waitlist') return { cited: [slot], replies: [replies.offerWaitlist(slot)], next: 'finalize' };
       const booking = await tools.book(member(state), sessionId);
-      return { replies: [booking.status === 'waitlisted' ? replies.bookedIntoWaitlist(slot) : replies.booked(slot)], next: 'finalize' };
+      return { cited: [slot], replies: [booking.status === 'waitlisted' ? replies.bookedIntoWaitlist(slot) : replies.booked(slot)], next: 'finalize' };
     }
 
     async function joinWaitlist(sessionId: string): Promise<Update> {
@@ -194,7 +199,7 @@ export function buildAgentGraph(deps: AgentDeps) {
       const session = sessionOf(slot);
       const { position } = Waitlist.of(session, slot.booking?.status === 'waitlisted').join(session, now, slot.booking?.status === 'confirmed');
       const booking = await tools.joinWaitlist(member(state), sessionId);
-      return { replies: [booking.status === 'confirmed' ? replies.booked(slot) : replies.joinedWaitlist(slot, position)], next: 'finalize' };
+      return { cited: [slot], replies: [booking.status === 'confirmed' ? replies.booked(slot) : replies.joinedWaitlist(slot, position)], next: 'finalize' };
     }
 
     async function cancel(bookingId: string): Promise<Update> {
@@ -202,7 +207,7 @@ export function buildAgentGraph(deps: AgentDeps) {
       // Pré-validação local: evita ida ao SaaS para o que o domínio já sabe recusar.
       const local = Booking.create({ id: bookingId, sessionId: slot.sessionId, status: slot.booking?.status ?? 'confirmed' }).cancel(sessionOf(slot), now);
       await tools.cancel(member(state), bookingId);
-      return { replies: [replies.canceled(slot, local.freedSeat)], next: 'finalize' };
+      return { cited: [slot], replies: [replies.canceled(slot, local.freedSeat)], next: 'finalize' };
     }
   };
 
@@ -252,7 +257,7 @@ export function buildAgentGraph(deps: AgentDeps) {
     });
     const steps = trail(state, 'finalize');
     deps.observer?.turnFinished({ outcome: state.outcome, steps, citationViolations: violations });
-    return { steps, replies: safe };
+    return { steps, replies: safe, ...(violations > 0 ? { cited: [] } : {}) };
   };
 
   const route = (state: State) => state.next;
@@ -288,6 +293,6 @@ export class LangGraphConversationAgent implements ConversationAgent {
 
   async respond(conversation: Conversation, turn: Turn): Promise<AgentResult> {
     const final = await this.graph.invoke({ conversation, turn });
-    return { replies: final.replies, outcome: final.outcome };
+    return { replies: final.replies, outcome: final.outcome, citations: final.cited };
   }
 }

@@ -2,7 +2,7 @@
 COMPOSE := docker compose
 PROFILES := --profile core --profile observability
 
-.PHONY: help network install up up-llm up-portfolio down logs ps seed lint test test-integration build clean
+.PHONY: help network install up up-llm up-portfolio down logs ps seed notify lint test test-integration build clean
 
 help: ## Lista os alvos
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-17s %s\n", $$1, $$2}'
@@ -36,6 +36,9 @@ ps: ## Estado dos serviços
 
 seed: ## Envia ao webhook uma mensagem de exemplo assinada (TEXT="...")
 	./scripts/seed-webhook.sh "$${TEXT:-Quais horários tem amanhã?}"
+
+notify: ## Pede um aviso por template (KIND=reminder|promotion, CONTACT, SESSION, DATE=AAAA-MM-DD)
+	./scripts/notify.sh
 
 lint: ## Lint e typecheck de todos os serviços
 	pnpm lint && pnpm typecheck

@@ -14,6 +14,8 @@ export type DomainErrorCode =
   | 'already_in_waitlist'
   | 'slot_not_offered'
   | 'conversation_handed_off'
+  | 'conversation_with_bot'
+  | 'customer_service_window_closed'
   | 'not_found'
   | 'access_denied'
   | 'contact_not_linked'

@@ -6,6 +6,7 @@ import { encodeChoiceId } from '../interactive-ids.js';
 
 export const LIST_BUTTON_LABEL = 'Ver opções';
 export const LIST_SECTION_TITLE = 'Aulas';
+export const TEMPLATE_LANGUAGE = 'pt_BR';
 
 export function translateReply(reply: ReplyRequested): MetaOutboundMessage {
   const base = { messaging_product: 'whatsapp', recipient_type: 'individual', to: reply.contactId } as const;
@@ -13,6 +14,18 @@ export function translateReply(reply: ReplyRequested): MetaOutboundMessage {
 
   if (content.kind === 'text') {
     return { ...base, type: 'text', text: { body: truncate(content.text, L.textBody), preview_url: false } };
+  }
+
+  if (content.kind === 'template') {
+    return {
+      ...base,
+      type: 'template',
+      template: {
+        name: content.template,
+        language: { code: TEMPLATE_LANGUAGE },
+        components: [{ type: 'body', parameters: content.params.map((text) => ({ type: 'text', text })) }],
+      },
+    };
   }
 
   const body = { text: truncate(content.body, L.interactiveBody) };
