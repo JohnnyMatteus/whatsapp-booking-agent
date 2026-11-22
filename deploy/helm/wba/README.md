@@ -5,6 +5,7 @@ o CI só roda `helm lint` e `helm template` (job `helm`).
 
 - Um release por namespace; os Services têm o nome simples do componente (o `kong.yaml` e o nginx do painel dependem disso).
 - RabbitMQ, Redis (7.4 ou mais novo: o booking-agent usa `HEXPIRE`), Keycloak, S3/MinIO, o SaaS e o provedor de LLM ficam fora do chart: os endereços vão em `config` e as credenciais num Secret existente (`secretName`, chaves no `values.yaml`).
+- Segurança dos pods: `runAsNonRoot`, UID e GID **numéricos** por componente (`uid` em `values.yaml`, o mesmo do `USER` da imagem: 1000 nos serviços Node, 65532 no saas-mcp-server, 10001 no media-processor e no api-gateway, 101 no painel), raiz somente leitura e só `/tmp` gravável (`emptyDir`); o painel também grava `/etc/nginx/conf.d` e `/var/cache/nginx`. O Kong usa `KONG_PREFIX=/tmp/kong`. O CI confere os UIDs no chart renderizado e sobe as imagens do painel e do gateway com `docker run --read-only --user <uid>` e os mesmos `tmpfs`.
 - Nada de segredo no chart; `helm template` falha sem `secretName`.
 - O api-gateway lê a chave pública do Keycloak ao subir (`OIDC_REALM_URL`); reinicie-o se o realm trocar de chave (ADR 0013).
 - Exposição: `ingress.enabled` publica `/webhooks` e `/api` (api-gateway) e `/` (painel). Os demais componentes só aceitam tráfego interno (NetworkPolicy, que exige um CNI com suporte).

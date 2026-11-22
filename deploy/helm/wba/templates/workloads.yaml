@@ -60,15 +60,20 @@ spec:
             {{- toYaml $root.Values.resources | nindent 12 }}
           securityContext:
             {{- toYaml $root.Values.containerSecurityContext | nindent 12 }}
-          {{- if $svc.writableTmp }}
+            runAsUser: {{ include "wba.uid" (dict "name" $name "uid" $svc.uid) }}
+            runAsGroup: {{ include "wba.uid" (dict "name" $name "uid" $svc.uid) }}
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
-          {{- end }}
-      {{- if $svc.writableTmp }}
+            {{- range $index, $path := $svc.writablePaths }}
+            - { name: writable-{{ $index }}, mountPath: {{ $path }} }
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
-      {{- end }}
+        {{- range $index, $path := $svc.writablePaths }}
+        - name: writable-{{ $index }}
+          emptyDir: {}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

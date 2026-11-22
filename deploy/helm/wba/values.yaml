@@ -58,6 +58,8 @@ containerSecurityContext:
 services:
   api-gateway:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 10001
     public: true
     image: api-gateway
     port: 8000
@@ -65,23 +67,27 @@ services:
     env:
       - { name: OIDC_ISSUER, valueFrom: { configMapKeyRef: { name: wba-config, key: OIDC_ISSUER } } }
       - { name: OIDC_REALM_URL, valueFrom: { configMapKeyRef: { name: wba-config, key: OIDC_REALM_URL } } }
-    # O Kong grava a configuração renderizada em /tmp e precisa de escrita nos diretórios de prefixo.
-    writableTmp: true
+    # Prefixo do Kong (KONG_PREFIX) e configuração renderizada ficam em /tmp (sempre um emptyDir, ver o template).
     probe:
       exec: { command: ["kong", "health"] }
   web:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 101
     public: true
     image: web
     port: 8080
     replicas: 2
-    writableTmp: true
+    # Com a raiz somente leitura o nginx precisa gravar nestes caminhos (além de /tmp).
+    writablePaths: [/etc/nginx/conf.d, /var/cache/nginx]
     env:
       - { name: GATEWAY_URL, value: "http://api-gateway:8000" }
     probe:
       httpGet: { path: /healthz, port: 8080 }
   messaging-webhook:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 1000
     image: messaging-gateway
     port: 8080
     replicas: 2
@@ -92,6 +98,8 @@ services:
       httpGet: { path: /healthz, port: 8080 }
   messaging-sender:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 1000
     image: messaging-gateway
     port: 8082
     replicas: 2
@@ -102,6 +110,8 @@ services:
       httpGet: { path: /healthz, port: 8082 }
   booking-agent:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 1000
     image: booking-agent
     port: 8081
     replicas: 2
@@ -111,6 +121,8 @@ services:
       httpGet: { path: /healthz, port: 8081 }
   saas-mcp-server:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 65532
     image: saas-mcp-server
     port: 8090
     replicas: 2
@@ -120,10 +132,11 @@ services:
       exec: { command: ["/saas-mcp-server", "healthcheck"] }
   media-processor:
     enabled: true
+    # UID numérico (o kubelet recusa runAsNonRoot com usuário só por nome); o mesmo do USER da imagem.
+    uid: 10001
     image: media-processor
     port: 8083
     replicas: 1
-    writableTmp: true
     env:
       - { name: PORT, value: "8083" }
       - { name: GATEWAY_URL, value: "http://messaging-webhook:8080" }
