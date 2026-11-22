@@ -223,11 +223,11 @@ jobs:
         run: pnpm --filter @wba/web build
       - name: Imagem Docker
         run: docker build -f web/Dockerfile -t whatsapp-booking-agent/web:ci .
-      - name: Roda como no Kubernetes (UID 101, raiz somente leitura, só /tmp, conf.d e cache gravaveis)
+      - name: Roda como no Kubernetes (UID 101, raiz somente leitura, só /tmp, conf.d e cache graváveis como um emptyDir, 1777)
         run: |
           set -o pipefail
           {
-            docker run -d --name web-ro --read-only --user 101:101 --tmpfs /tmp --tmpfs /etc/nginx/conf.d --tmpfs /var/cache/nginx -p 8080:8080 -e GATEWAY_URL=http://127.0.0.1:1 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e OIDC_CLIENT_ID=wba-panel whatsapp-booking-agent/web:ci
+            docker run -d --name web-ro --read-only --user 101:101 --tmpfs /tmp --tmpfs /etc/nginx/conf.d:mode=1777 --tmpfs /var/cache/nginx:mode=1777 -p 8080:8080 -e GATEWAY_URL=http://127.0.0.1:1 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e OIDC_CLIENT_ID=wba-panel whatsapp-booking-agent/web:ci
             for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1 && break; sleep 1; done
             curl -fsS http://127.0.0.1:8080/healthz || { docker logs web-ro; exit 1; }
             curl -fsS http://127.0.0.1:8080/config.json | grep -q '"clientId":"wba-panel"' || { docker logs web-ro; exit 1; }
