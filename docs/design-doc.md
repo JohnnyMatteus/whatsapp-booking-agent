@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Fundação implementada (rodada 1) |
+| Status | Implementado; o que falta está na seção 12 |
 | Autor | Johnny Santos |
 | Última revisão | 2026-11-21 |
 | Depende de | [saas-multitenant](https://github.com/JohnnyMatteus/saas-multitenant) (API REST v1 de agenda) |
@@ -30,12 +30,18 @@ Duas restrições externas moldam o desenho:
 - Nenhum tipo de provedor ou do SaaS dentro do domínio (Anti-Corruption Layer por provedor e no SaaS); o domínio e o booking-agent não sabem qual provedor atende o estúdio.
 - Entrada única pelo api-gateway (Kong): roteamento, rate limit e JWT do painel.
 
-**Não-objetivos nesta fundação**
+**Não-objetivos**
 
-- Atendimento humano completo (caixa de entrada para o atendente responder pelo painel). Nesta rodada o painel mostra a fila e devolve a conversa ao bot.
-- Vínculo telefone → aluno no SaaS e token exchange no Keycloak (o servidor MCP usa token de desenvolvimento por estúdio).
-- Mensagens proativas por template (lembrete de aula, aviso de promoção da fila). Fora da janela de 24 horas da Meta, só template aprovado pode ser enviado.
 - Pagamentos, planos, cadastro de aluno: são temas sensíveis e vão para humano.
+- Mensagens proativas em massa. Só dois avisos saem sem o aluno ter escrito (lembrete de aula e vaga liberada na lista de espera), por template na Cloud API e por texto no Whatsmiau, uma vez por reserva.
+- Chatbot de uso geral: o escopo é fechado (seção 1).
+
+**Já entregue, e onde**
+
+- Atendimento humano pelo painel: o atendente lê a conversa, responde pela fila (`reply-as-attendant.ts`, janela de 24 horas conferida) e devolve ao bot.
+- Vínculo telefone → aluno por opt-in (`vincular 123456`) e conta de serviço por estúdio, sem token exchange com impersonation ([ADR 0009](adr/0009-vinculo-telefone-aluno-conta-de-servico.md)).
+- Avisos por template (`notify-student.ts`, `reminder-scheduler.ts`), com a data sempre vinda da consulta à agenda.
+- Login do atendente por OIDC ([ADR 0013](adr/0013-login-do-painel-oidc.md)).
 
 ## 3. Arquitetura
 
@@ -280,7 +286,7 @@ O sender consome `whatsapp-sender.replies`. Erro transitório da Cloud API (429,
 - **Servidor MCP** em rede interna e protegido por token compartilhado; o SaaS continua aplicando isolamento por tenant e RBAC pelo JWT.
 - **Dados pessoais (LGPD)**: telefone e texto do aluno são censurados nos logs (redação no pino); erros nunca incluem corpo de resposta da Meta, do SaaS ou do LLM (podem ecoar a mensagem); o painel recebe o contato mascarado; o áudio expira em 30 dias no bucket; a transcrição é local, então a voz do aluno não vai para API de terceiros.
 - **OWASP API**: validação de entrada por schema em todas as fronteiras (webhook, fila, ferramentas, LLM, configuração); sem SSRF (URLs de mídia só da Cloud API configurada ou dos hosts permitidos do Whatsmiau); falha de configuração derruba o processo na subida citando só o nome da variável.
-- **Painel**: JWT injetado pelo proxy do painel (nunca no navegador) e validado no api-gateway, que troca pelo token de serviço do booking-agent; em desenvolvimento é HS256 sem expiração, e a troca por OIDC no Keycloak está nos próximos passos.
+- **Painel**: login por OIDC no Keycloak (code + PKCE); o api-gateway valida o JWT (RS256, `exp`) e o booking-agent valida de novo e extrai estúdio (role `tenant:<id>`) e papel (`attendant`, `manager`) do token; o `:tenantId` da URL precisa ser o do token, em todas as rotas, com teste de vazamento por rota ([ADR 0013](adr/0013-login-do-painel-oidc.md)). A rota `/internal` usa token de serviço e não tem rota pública.
 
 ## 8. Observabilidade
 

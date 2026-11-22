@@ -16,3 +16,4 @@ Formato: Contexto, Decisão, Consequências e Alternativas. Status: Aceito, salv
 | [0010](0010-messaging-gateway-e-provedores-de-whatsapp.md) | Messaging-gateway: porta `MessagingProvider`, provedores Cloud API e Whatsmiau escolhidos por estúdio, riscos do Whatsmiau e quando usar cada um |
 | [0011](0011-media-processor.md) | Media-processor: valida, guarda no S3, miniatura, transcrição e evento `MediaProcessed` |
 | [0012](0012-api-gateway-kong.md) | API Gateway com Kong DB-less: webhooks sem JWT, painel com JWT, rate limit |
+| [0013](0013-login-do-painel-oidc.md) | Login do painel por OIDC (Keycloak, PKCE), estúdio e papel vindos do token, validação no gateway e no booking-agent |

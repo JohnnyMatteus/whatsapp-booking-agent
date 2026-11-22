@@ -1,63 +1,11 @@
-import { createMetricsRegistry } from '@wba/observability';
 import { describe, expect, it } from 'vitest';
-import { buildPanelApi, maskContact } from '../../src/adapters/http/server.js';
-import { InMemoryConversationLog, InMemoryConversationRepository, InMemoryHandoffQueue, InMemoryMetricsStore, InMemoryNoticeLedger } from '../../src/adapters/persistence/in-memory.js';
-import { HandleInboundMessage } from '../../src/application/handle-inbound.js';
-import { MetricsRecorder } from '../../src/application/metrics-recorder.js';
-import { NotifyStudent } from '../../src/application/notify-student.js';
-import { PanelQueries } from '../../src/application/panel-queries.js';
-import type { AgentResult, ConversationAgent, OutboundMessage, OutboundPublisher } from '../../src/application/ports.js';
-import { ReplyAsAttendant } from '../../src/application/reply-as-attendant.js';
-import { ResumeConversation } from '../../src/application/resume-conversation.js';
-import { aSession, NOW } from '../domain/fixtures.js';
-import { FakeSchedulingTools } from '../support/fake-tools.js';
-
-const TENANT = 'estudio-lotus';
-const CONTACT = '5511900000001';
-const CONVERSATION = encodeURIComponent(`${TENANT}:${CONTACT}`);
-const auth = { authorization: 'Bearer dev-only-panel-token-0000' };
-const internal = { authorization: 'Bearer dev-only-internal-token' };
-
-async function setup(options: { handedOff?: boolean } = {}) {
-  let now = NOW;
-  const clock = { now: () => now };
-  const conversations = new InMemoryConversationRepository();
-  const handoffs = new InMemoryHandoffQueue();
-  const log = new InMemoryConversationLog();
-  const metricsStore = new InMemoryMetricsStore();
-  const metrics = new MetricsRecorder(metricsStore, 'America/Sao_Paulo');
-  const published: OutboundMessage[] = [];
-  const publisher: OutboundPublisher = { publish: async (messages) => void published.push(...messages) };
-  const tools = new FakeSchedulingTools([{ session: aSession(), myBooking: { id: 'bk-1', status: 'confirmed' } }]);
-
-  let result: AgentResult = { replies: [{ kind: 'text', text: 'Olá!' }], outcome: 'answered', citations: [] };
-  const agent: ConversationAgent = {
-    respond: async (conversation) => {
-      if (result.outcome === 'handed_off') conversation.handOff('sensitive_topic', now);
-      return result;
-    },
-  };
-  const inbound = new HandleInboundMessage({ conversations, agent, publisher, handoffs, log, metrics, clock });
-  if (options.handedOff) {
-    result = { replies: [{ kind: 'text', text: 'Vou chamar alguém.' }], outcome: 'handed_off', citations: [] };
-    await inbound.execute({ tenantId: TENANT, contactId: CONTACT, messageId: 'wamid.1', turn: { kind: 'text', text: 'estou com dor' } });
-    published.length = 0;
-  }
-  const app = buildPanelApi({
-    token: 'dev-only-panel-token-0000',
-    internalToken: 'dev-only-internal-token',
-    queries: new PanelQueries({ conversations, log, metrics: metricsStore, clock, timezone: 'America/Sao_Paulo' }),
-    reply: new ReplyAsAttendant({ conversations, publisher, log, metrics, clock }),
-    resume: new ResumeConversation({ conversations, handoffs, publisher, log, metrics, clock }),
-    notify: new NotifyStudent({ tools, conversations, publisher, log, metrics, ledger: new InMemoryNoticeLedger(), clock, timezone: 'America/Sao_Paulo' }),
-    registry: createMetricsRegistry('test'),
-  });
-  return { app, published, conversations, advance: (ms: number) => void (now = new Date(now.getTime() + ms)), inbound };
-}
+import { maskContact } from '../../src/adapters/http/server.js';
+import { CONTACT, CONVERSATION, internal, setup, TENANT } from '../support/panel-harness.js';
+import { NOW } from '../domain/fixtures.js';
 
 describe('API do painel', () => {
   it('exige token no painel e na rota interna', async () => {
-    const { app } = await setup();
+    const { app, auth } = await setup();
 
     expect((await app.inject({ url: `/api/tenants/${TENANT}/conversations` })).statusCode).toBe(401);
     expect((await app.inject({ method: 'POST', url: `/internal/tenants/${TENANT}/notifications`, headers: auth, payload: {} })).statusCode).toBe(401);
@@ -92,7 +40,7 @@ describe('API do painel', () => {
   });
 
   it('lista a fila com transferidas primeiro, contato mascarado e contadores', async () => {
-    const { app } = await setup({ handedOff: true });
+    const { app, auth } = await setup({ handedOff: true });
 
     const response = await app.inject({ url: `/api/tenants/${TENANT}/conversations`, headers: auth });
 
@@ -105,7 +53,7 @@ describe('API do painel', () => {
   });
 
   it('detalhe traz a linha do tempo com a costura e a janela de 24 h', async () => {
-    const { app } = await setup({ handedOff: true });
+    const { app, auth } = await setup({ handedOff: true });
 
     const body = (await app.inject({ url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}`, headers: auth })).json();
 
@@ -115,16 +63,16 @@ describe('API do painel', () => {
     expect(body.context.linked).toBeNull();
   });
 
-  it('estúdio diferente do id da conversa recebe 404', async () => {
-    const { app } = await setup({ handedOff: true });
+  it('conversa de outro estúdio, pedida por quem é do outro estúdio, recebe 404', async () => {
+    const { app, bearer } = await setup({ handedOff: true });
 
-    const response = await app.inject({ url: `/api/tenants/outro-estudio/conversations/${CONVERSATION}`, headers: auth });
+    const response = await app.inject({ url: `/api/tenants/estudio-sol/conversations/${CONVERSATION}`, headers: await bearer({ tenant: 'estudio-sol' }) });
 
     expect(response.statusCode).toBe(404);
   });
 
   it('o atendente responde (202), a resposta sai pela fila e a espera entra nas métricas', async () => {
-    const { app, published, advance } = await setup({ handedOff: true });
+    const { app, auth, published, advance } = await setup({ handedOff: true });
     advance(4 * 60_000);
 
     const sent = await app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: auth, payload: { text: 'Oi! Aqui é a recepção.' } });
@@ -139,12 +87,12 @@ describe('API do painel', () => {
   it('recusa resposta com a conversa no bot (409) e fora da janela de 24 h (409)', async () => {
     const withBot = await setup();
     await withBot.inbound.execute({ tenantId: TENANT, contactId: CONTACT, messageId: 'wamid.1', turn: { kind: 'text', text: 'oi' } });
-    const early = await withBot.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: auth, payload: { text: 'oi' } });
+    const early = await withBot.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: withBot.auth, payload: { text: 'oi' } });
 
     const late = await setup({ handedOff: true });
     late.advance(25 * 3600_000);
-    const closed = await late.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: auth, payload: { text: 'oi' } });
-    const empty = await late.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: auth, payload: { text: '  ' } });
+    const closed = await late.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: late.auth, payload: { text: 'oi' } });
+    const empty = await late.app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, headers: late.auth, payload: { text: '  ' } });
 
     expect(early.statusCode).toBe(409);
     expect(early.json().code).toBe('conversation_with_bot');
@@ -153,7 +101,7 @@ describe('API do painel', () => {
   });
 
   it('devolve ao bot: 204, aviso ao aluno e costura "resumed"; repetir dá 409', async () => {
-    const { app, published } = await setup({ handedOff: true });
+    const { app, auth, published } = await setup({ handedOff: true });
 
     const resumed = await app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/resume`, headers: auth });
     const again = await app.inject({ method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/resume`, headers: auth });
@@ -167,7 +115,7 @@ describe('API do painel', () => {
   });
 
   it('envia o template de lembrete uma única vez, confirmando a reserva na agenda', async () => {
-    const { app, published } = await setup();
+    const { app, auth, published } = await setup();
     const payload = { contactId: CONTACT, kind: 'reminder', sessionId: 'ses-hatha-1', date: '2026-03-03' };
 
     const first = await app.inject({ method: 'POST', url: `/internal/tenants/${TENANT}/notifications`, headers: internal, payload });
@@ -192,7 +140,7 @@ describe('API do painel', () => {
   });
 
   it('política de escopo e máscara', async () => {
-    const { app } = await setup();
+    const { app, auth } = await setup();
 
     const scope = (await app.inject({ url: `/api/tenants/${TENANT}/scope`, headers: auth })).json();
 

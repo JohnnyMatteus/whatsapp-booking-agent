@@ -1,0 +1,174 @@
+{
+  "realm": "wba",
+  "enabled": true,
+  "displayName": "WhatsApp Booking Agent (desenvolvimento)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "attendant",
+        "description": "Atende a fila do estúdio"
+      },
+      {
+        "name": "manager",
+        "description": "Tudo do atendente mais as métricas"
+      },
+      {
+        "name": "tenant:estudio-lotus",
+        "description": "Pertence ao estúdio estudio-lotus"
+      },
+      {
+        "name": "tenant:estudio-sol",
+        "description": "Pertence ao estúdio estudio-sol"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "wba-panel",
+      "name": "Painel do estúdio",
+      "description": "SPA do painel: authorization code com PKCE S256, sem segredo.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:5173/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:5173/*##http://localhost:5173/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-wba-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "wba-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "wba-dev-cli",
+      "name": "Token de desenvolvimento",
+      "description": "Só desenvolvimento: password grant para scripts/panel-token.sh e o smoke. Não existe em produção.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:5173/*##http://localhost:5173/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-wba-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "wba-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "ana.lotus@example.com",
+      "email": "ana.lotus@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Ana",
+      "lastName": "Dev",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-only-ana",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "attendant",
+        "tenant:estudio-lotus"
+      ]
+    },
+    {
+      "username": "bia.lotus@example.com",
+      "email": "bia.lotus@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Bia",
+      "lastName": "Dev",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-only-bia",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager",
+        "tenant:estudio-lotus"
+      ]
+    },
+    {
+      "username": "caio.sol@example.com",
+      "email": "caio.sol@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Caio",
+      "lastName": "Dev",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-only-caio",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "attendant",
+        "tenant:estudio-sol"
+      ]
+    }
+  ]
+}

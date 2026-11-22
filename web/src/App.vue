@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { mdiChartBox, mdiInbox, mdiShieldCheckOutline } from '@mdi/js';
+import { mdiChartBox, mdiInbox, mdiLogout, mdiShieldCheckOutline } from '@mdi/js';
+import { canAccess } from './auth/session';
+import { useAuth, useSession } from './composables/auth';
 import { useTenant } from './composables/panel';
 
 const tenantId = useTenant();
+const session = useSession();
+const auth = useAuth();
 const nav = [
-  { to: '/conversas', label: 'Conversas', icon: mdiInbox },
-  { to: '/metricas', label: 'Métricas', icon: mdiChartBox },
-  { to: '/escopo', label: 'Escopo e respostas', icon: mdiShieldCheckOutline },
-];
+  { to: '/conversas', label: 'Conversas', icon: mdiInbox, role: 'attendant' },
+  { to: '/metricas', label: 'Métricas', icon: mdiChartBox, role: 'manager' },
+  { to: '/escopo', label: 'Escopo e respostas', icon: mdiShieldCheckOutline, role: 'attendant' },
+].filter((item) => !session || canAccess(session, item.role as 'attendant' | 'manager'));
 </script>
 
 <template>
@@ -30,6 +34,20 @@ const nav = [
           {{ item.label }}
         </v-btn>
       </nav>
+      <template v-if="session && auth">
+        <span
+          class="meta mr-2"
+          data-test="user-name"
+        >{{ session.name }}</span>
+        <v-btn
+          :prepend-icon="mdiLogout"
+          variant="text"
+          data-test="logout"
+          @click="auth.logout()"
+        >
+          Sair
+        </v-btn>
+      </template>
     </v-app-bar>
     <v-main>
       <router-view />
