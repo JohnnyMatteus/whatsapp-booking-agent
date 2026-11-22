@@ -13,16 +13,15 @@ export interface TestIdp {
 }
 
 /** Par RS256 efêmero, só na memória do teste: nada de chave em arquivo. */
-export async function ephemeralPair(): Promise<{ verify: CryptoKey; sign: CryptoKey }> {
-  const { publicKey: verify, ...rest } = await generateKeyPair('RS256');
-  return { verify, sign: Object.values(rest)[0] as CryptoKey };
+export async function ephemeralPair(): Promise<{ publicKey: CryptoKey; privateKey: CryptoKey }> {
+  return generateKeyPair('RS256');
 }
 
 export async function createTestIdp(): Promise<TestIdp> {
-  const { verify, sign } = await ephemeralPair();
+  const { publicKey, privateKey } = await ephemeralPair();
   return {
-    keys: async () => verify,
-    async token({ tenant = 'estudio-lotus', roles = ['attendant'], sub = 'user-1', issuer = ISSUER, audience = AUDIENCE, expiresIn = '5m', signWith = sign } = {}) {
+    keys: async () => publicKey,
+    async token({ tenant = 'estudio-lotus', roles = ['attendant'], sub = 'user-1', issuer = ISSUER, audience = AUDIENCE, expiresIn = '5m', signWith = privateKey } = {}) {
       const jwt = new SignJWT({ realm_access: { roles: tenant === null ? roles : [...roles, `tenant:${tenant}`] } })
         .setProtectedHeader({ alg: 'RS256' })
         .setSubject(sub)

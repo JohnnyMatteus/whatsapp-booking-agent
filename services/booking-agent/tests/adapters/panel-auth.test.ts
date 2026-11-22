@@ -35,7 +35,7 @@ describe.each(ROUTES)('$name', (route) => {
 
   it('recusa sem token, token expirado, forjado, de outra audiência e de outro emissor (401)', async () => {
     const ctx = await setup({ handedOff: true });
-    const stranger = (await ephemeralPair()).sign;
+    const stranger = (await ephemeralPair()).privateKey;
     const attempts: Record<string, string>[] = [
       {},
       { authorization: 'Bearer lixo' },
