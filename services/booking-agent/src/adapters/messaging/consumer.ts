@@ -4,14 +4,20 @@ import { inSpan, type Logger } from '@wba/observability';
 import type { Tracer } from '@opentelemetry/api';
 import type { HandleInboundMessage } from '../../application/handle-inbound.js';
 import type { MetricsRecorder } from '../../application/metrics-recorder.js';
+import type { MediaNotes } from '../../application/ports.js';
 import type { AgentMetrics } from '../../telemetry.js';
 import { toInboundCommand } from './mapping.js';
 
-export function createInboundHandler(deps: { useCase: HandleInboundMessage; metrics: AgentMetrics; recorder: MetricsRecorder; logger: Logger; tracer: Tracer }) {
+export function createInboundHandler(deps: { useCase: HandleInboundMessage; metrics: AgentMetrics; recorder: MetricsRecorder; mediaNotes: MediaNotes; logger: Logger; tracer: Tracer }) {
   return async (envelope: AnyEnvelope): Promise<void> => {
     if (envelope.type === MessageType.DeliveryStatusChanged) {
       deps.metrics.deliveryStatus.inc({ status: envelope.payload.status });
       if (envelope.payload.status === 'failed') await deps.recorder.deliveryFailure(envelope.payload.tenantId, new Date(envelope.payload.occurredAt));
+      return;
+    }
+    if (envelope.type === MessageType.MediaProcessed) {
+      const { tenantId, messageId, kind, status, rejectionReason, transcribed, thumbnailKey } = envelope.payload;
+      await deps.mediaNotes.save(tenantId, messageId, { kind, status, rejectionReason: rejectionReason ?? null, transcribed, thumbnailKey: thumbnailKey ?? null });
       return;
     }
     const command = toInboundCommand(envelope);

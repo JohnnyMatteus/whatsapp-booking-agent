@@ -131,7 +131,7 @@ Envelope versionado (`packages/contracts`): `{ id, type, version: 1, occurredAt,
 | --- | --- | --- | --- |
 | `inbound.message_received` | messaging-gateway, media-processor | booking-agent | origem + `text` (com `transcribed`) ou `unsupported` |
 | `inbound.media_received` | messaging-gateway | media-processor | origem + `kind` (`audio`, `image`), `mediaId`, `mimeType` |
-| `media.processed` | media-processor | (painel, evolução) | origem + `kind`, `status`, `storageKey`, `thumbnailKey?`, `transcribed`, `rejectionReason?` |
+| `media.processed` | media-processor | booking-agent (anotação por mensagem: miniatura e recusa no painel) | origem + `kind`, `status`, `storageKey`, `thumbnailKey?`, `transcribed`, `rejectionReason?` |
 | `inbound.booking_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` (`list`, `button`, `form`) |
 | `inbound.cancellation_requested` | messaging-gateway | booking-agent | origem + `bookingId`, `source` |
 | `inbound.waitlist_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` |
@@ -338,13 +338,13 @@ Conforme `courses.yaml` (`exercised_by: whatsapp-booking-agent`):
 
 ## 12. Plano de evolução (próximos passos)
 
-1. **Identidade real do aluno**: vínculo telefone → aluno no SaaS (opt-in com código de verificação) e token exchange (RFC 8693) no Keycloak, no lugar do `StaticTokenSource`.
-2. **Caixa de entrada humana** no painel: ver o histórico, responder pelo painel (via sender) e encerrar o atendimento. Hoje a fila mostra e devolve ao bot.
-3. **Outbox** no booking-agent para publicar e salvar atomicamente, e **serialização por contato** (consistent hash exchange ou single active consumer por partição) para eliminar a corrida resolvida hoje por compare-and-set e retry.
-4. **Templates aprovados** para avisar promoção da lista de espera e lembrar aula (fora da janela de 24 horas).
-5. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`).
-6. **media-processor**: retry com TTL e DLQ iguais aos serviços Node, métricas Prometheus e teste de integração com MinIO; painel com miniaturas.
-7. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado) e tratar JIDs `@lid`.
-8. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
-8. **Painel com login** OIDC no Keycloak do SaaS, conversas e métricas de atendimento.
-9. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.
+O que já saiu do plano (vínculo do aluno, caixa de entrada humana, avisos por template, media-processor com retry e miniaturas, login do painel) está descrito na seção 2 e nos ADRs 0009, 0011 e 0013. O que falta:
+
+1. **Outbox** no booking-agent para publicar e salvar atomicamente, e **serialização por contato** (single active consumer ou hash por contato) para eliminar a corrida resolvida hoje por compare-and-set e retry.
+2. **Templates aprovados na Meta**: o código já envia `lembrete_aula` e `vaga_liberada`; falta criá-los e aprová-los na conta Business (depende do autor).
+3. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`; depende de credencial).
+4. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e decidir o LID não resolvido (o resolvido já funciona; falta confirmar se o envio aceita LID).
+5. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
+6. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
+7. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
+8. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.

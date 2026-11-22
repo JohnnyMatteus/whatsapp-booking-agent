@@ -33,6 +33,20 @@ describe('ACL Whatsmiau: webhook → linguagem publicada', () => {
     ]);
   });
 
+  it('LID já resolvido pelo Whatsmiau: remoteJid traz o número e o contato é o número, não o LID', () => {
+    const [item] = translate('text-lid-resolved').translated;
+
+    expect(item?.command).toMatchObject({ payload: { contactId: '5511900000001', content: { kind: 'text', text: 'Quero reservar o pilates' } } });
+    expect(JSON.stringify(item)).not.toContain('@lid');
+  });
+
+  it('LID sem número conhecido não é roteável: ignorado com motivo e sem comando', () => {
+    const { translated, ignored } = translate('text-lid-unresolved');
+
+    expect(translated).toEqual([]);
+    expect(ignored.map((i) => i.reason)).toEqual(['unsupported_address']);
+  });
+
   it('áudio vira MediaReceived e o base64 embutido é devolvido para guarda temporária', () => {
     const { translated, inlineMedia } = translate('audio-base64');
 
@@ -111,7 +125,7 @@ describe('ACL Whatsmiau: webhook → linguagem publicada', () => {
 
   it('todo comando traduzido cabe no envelope do contrato', () => {
     const meta = { id: '7d4b0f0e-2f0a-4f43-8a3c-000000000099', correlationId: 'x', occurredAt: new Date('2026-03-02T12:00:00Z') };
-    for (const name of ['text-message', 'audio-base64', 'image-media-url', 'list-reply', 'buttons-reply-cancel', 'status-update', 'sticker']) {
+    for (const name of ['text-message', 'text-lid-resolved', 'audio-base64', 'image-media-url', 'list-reply', 'buttons-reply-cancel', 'status-update', 'sticker']) {
       for (const { command } of translate(name).translated) {
         expect(() => parseEnvelope(JSON.parse(JSON.stringify(createEnvelope(command.type, command.payload, meta))))).not.toThrow();
       }

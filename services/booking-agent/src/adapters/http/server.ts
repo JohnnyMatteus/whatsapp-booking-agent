@@ -143,6 +143,15 @@ export function buildPanelApi(deps: PanelApiDeps): FastifyInstance {
     return deps.queries.metrics(request.params.tenantId, days.data);
   });
 
+  app.get<{ Params: { tenantId: string; messageId: string } }>('/api/tenants/:tenantId/media/:messageId/thumbnail', async (request, reply) => {
+    try {
+      const bytes = await deps.queries.thumbnail(request.params.tenantId, request.params.messageId);
+      return reply.type('image/jpeg').header('cache-control', 'private, max-age=300').header('x-content-type-options', 'nosniff').send(Buffer.from(bytes));
+    } catch (error) {
+      return fail(reply, error);
+    }
+  });
+
   app.get('/api/tenants/:tenantId/scope', async () => scopeInfo());
 
   app.post<{ Params: { tenantId: string } }>('/internal/tenants/:tenantId/notifications', async (request, reply) => {

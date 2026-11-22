@@ -3,10 +3,17 @@
   "instance": "estudio-sol",
   "date_time": "2026-03-02T12:00:00Z",
   "data": {
-    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000001", "addressingMode": "pn" },
+    "key": {
+      "remoteJid": "5511900000001@s.whatsapp.net",
+      "fromMe": false,
+      "id": "3EB0A0000000000000000001",
+      "addressingMode": "jid"
+    },
     "pushName": "Aluna Exemplo",
     "status": "received",
-    "message": { "conversation": "Quais horários tem amanhã?" },
+    "message": {
+      "conversation": "Quais horários tem amanhã?"
+    },
     "messageType": "conversation",
     "messageTimestamp": 1772452800,
     "instanceId": "estudio-sol",

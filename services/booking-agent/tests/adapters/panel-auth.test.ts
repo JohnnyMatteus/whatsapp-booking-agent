@@ -13,6 +13,7 @@ const ROUTES = [
   { name: 'resposta do atendente', method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, role: 'attendant', payload: { text: 'oi' } },
   { name: 'devolução ao bot', method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/resume`, role: 'attendant' },
   { name: 'métricas', method: 'GET', url: `/api/tenants/${TENANT}/metrics?days=1`, role: 'manager' },
+  { name: 'miniatura de mídia', method: 'GET', url: `/api/tenants/${TENANT}/media/wamid.1/thumbnail`, role: 'attendant' },
   { name: 'escopo', method: 'GET', url: `/api/tenants/${TENANT}/scope`, role: 'attendant' },
 ] as const;
 
@@ -34,7 +35,7 @@ describe.each(ROUTES)('$name', (route) => {
 
   it('recusa sem token, token expirado, forjado, de outra audiência e de outro emissor (401)', async () => {
     const ctx = await setup({ handedOff: true });
-    const stranger = (await ephemeralPair()).sign;
+    const stranger = (await ephemeralPair()).privateKey;
     const attempts: Record<string, string>[] = [
       {},
       { authorization: 'Bearer lixo' },

@@ -154,6 +154,9 @@ services:
       - "127.0.0.1:${KEYCLOAK_PORT:-8180}:8080"
     volumes:
       - ./infra/keycloak/wba-realm.json:/opt/keycloak/data/import/wba-realm.json:ro
+      # Banco de desenvolvimento (H2) persistido: recriar o contêiner não troca o par de chaves do realm,
+      # que o api-gateway leu ao subir.
+      - keycloak-data:/opt/keycloak/data/h2
     networks: [booking-net]
     healthcheck:
       # A imagem não traz curl: teste TCP na porta de gerenciamento (9000) lendo o /health/ready.
@@ -289,6 +292,9 @@ services:
       STUDIO_TIMEZONE: ${STUDIO_TIMEZONE:-America/Sao_Paulo}
       OIDC_ISSUER: *oidc-issuer
       OIDC_AUDIENCE: wba-api
+      # Miniaturas das imagens dos alunos, pela API interna do media-processor.
+      MEDIA_PROCESSOR_URL: http://media-processor:8083
+      MEDIA_API_TOKEN: ${MEDIA_API_TOKEN:-dev-only-media-token}
       OIDC_JWKS_URL: http://keycloak:8080/realms/wba/protocol/openid-connect/certs
       # Rota /internal (avisos por template), chamada pelo SaaS; o proxy do painel não a expõe.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-only-internal-token}
@@ -323,7 +329,15 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-wba-admin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
       TRANSCRIBER: ${TRANSCRIBER:-fake}
+      # Métricas Prometheus (e a prova de vida) nesta porta.
+      PORT: "8083"
     networks: [booking-net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/metrics', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -431,6 +445,7 @@ services:
         condition: service_healthy
 
 volumes:
+  keycloak-data:
   rabbitmq-data:
   redis-data:
   minio-data:

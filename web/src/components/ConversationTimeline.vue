@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import type { TimelineEntry } from '../api/schemas';
-import { ACTION_LABEL, TEMPLATE_LABEL } from '../lib/labels';
+import { ACTION_LABEL, REJECTION_LABEL, TEMPLATE_LABEL } from '../lib/labels';
 import { clock } from '../lib/time';
 import BotMonogram from './BotMonogram.vue';
+import MediaThumbnail from './MediaThumbnail.vue';
 import HandoffSeam from './signature/HandoffSeam.vue';
 import SourceStamp from './signature/SourceStamp.vue';
 
@@ -73,6 +74,19 @@ watch(count, async () => {
           <template v-else>
             {{ entry.text }}
           </template>
+          <MediaThumbnail
+            v-if="entry.media?.hasThumbnail"
+            :message-id="entry.messageId"
+          />
+          <v-chip
+            v-if="entry.media?.status === 'rejected'"
+            size="x-small"
+            color="warning"
+            class="mt-2"
+            data-test="media-rejected"
+          >
+            mídia recusada · {{ REJECTION_LABEL[entry.media.rejectionReason ?? ''] ?? 'motivo desconhecido' }}
+          </v-chip>
         </div>
       </div>
 

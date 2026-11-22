@@ -1,7 +1,7 @@
 import { createMetricsRegistry } from '@wba/observability';
 import { createJwtVerifier } from '../../src/adapters/http/auth.js';
 import { buildPanelApi } from '../../src/adapters/http/server.js';
-import { InMemoryConversationLog, InMemoryConversationRepository, InMemoryHandoffQueue, InMemoryMetricsStore, InMemoryNoticeLedger } from '../../src/adapters/persistence/in-memory.js';
+import { InMemoryConversationLog, InMemoryConversationRepository, InMemoryHandoffQueue, InMemoryMediaNotes, InMemoryMetricsStore, InMemoryNoticeLedger } from '../../src/adapters/persistence/in-memory.js';
 import { HandleInboundMessage } from '../../src/application/handle-inbound.js';
 import { MetricsRecorder } from '../../src/application/metrics-recorder.js';
 import { NotifyStudent } from '../../src/application/notify-student.js';
@@ -16,6 +16,7 @@ import { AUDIENCE, createTestIdp, ISSUER, type TestIdp } from './tokens.js';
 export const TENANT = 'estudio-lotus';
 export const CONTACT = '5511900000001';
 export const CONVERSATION = encodeURIComponent(`${TENANT}:${CONTACT}`);
+export const THUMBNAIL_KEY = `media/${TENANT}/2026-03-02/m1.thumb.jpg`;
 export const internal = { authorization: 'Bearer dev-only-internal-token' };
 
 export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}) {
@@ -27,6 +28,9 @@ export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}
   const log = new InMemoryConversationLog();
   const metricsStore = new InMemoryMetricsStore();
   const metrics = new MetricsRecorder(metricsStore, 'America/Sao_Paulo');
+  const mediaNotes = new InMemoryMediaNotes();
+  const thumbnailBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  const thumbnails = { fetch: async (key: string) => (key === THUMBNAIL_KEY ? thumbnailBytes : null) };
   const published: OutboundMessage[] = [];
   const publisher: OutboundPublisher = { publish: async (messages) => void published.push(...messages) };
   const tools = new FakeSchedulingTools([{ session: aSession(), myBooking: { id: 'bk-1', status: 'confirmed' } }]);
@@ -43,11 +47,12 @@ export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}
     result = { replies: [{ kind: 'text', text: 'Vou chamar alguém.' }], outcome: 'handed_off', citations: [] };
     await inbound.execute({ tenantId: TENANT, contactId: CONTACT, messageId: 'wamid.1', turn: { kind: 'text', text: 'estou com dor' } });
     published.length = 0;
+    await mediaNotes.save(TENANT, 'wamid.1', { kind: 'image', status: 'processed', rejectionReason: null, transcribed: false, thumbnailKey: THUMBNAIL_KEY });
   }
   const app = buildPanelApi({
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keys: idp.keys }),
     internalToken: 'dev-only-internal-token',
-    queries: new PanelQueries({ conversations, log, metrics: metricsStore, clock, timezone: 'America/Sao_Paulo' }),
+    queries: new PanelQueries({ conversations, log, metrics: metricsStore, mediaNotes, thumbnails, clock, timezone: 'America/Sao_Paulo' }),
     reply: new ReplyAsAttendant({ conversations, publisher, log, metrics, clock }),
     resume: new ResumeConversation({ conversations, handoffs, publisher, log, metrics, clock }),
     notify: new NotifyStudent({ tools, conversations, publisher, log, metrics, ledger: new InMemoryNoticeLedger(), clock, timezone: 'America/Sao_Paulo' }),
@@ -55,6 +60,6 @@ export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}
   });
   const bearer = async (claims?: Parameters<TestIdp['token']>[0]) => ({ authorization: `Bearer ${await idp.token(claims)}` });
   const auth = await bearer({ roles: ['manager'] });
-  return { app, auth, published, conversations, idp, bearer, advance: (ms: number) => void (now = new Date(now.getTime() + ms)), inbound };
+  return { app, auth, mediaNotes, thumbnailBytes, published, conversations, idp, bearer, advance: (ms: number) => void (now = new Date(now.getTime() + ms)), inbound };
 }
 

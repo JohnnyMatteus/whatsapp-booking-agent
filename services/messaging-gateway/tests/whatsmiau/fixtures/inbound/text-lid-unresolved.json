@@ -1,0 +1,23 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "date_time": "2026-03-02T12:00:00Z",
+  "data": {
+    "key": {
+      "remoteJid": "180000000000001@lid",
+      "fromMe": false,
+      "id": "3EB0A0000000000000000012",
+      "addressingMode": "lid",
+      "remoteLid": "180000000000001@lid"
+    },
+    "pushName": "Aluna Exemplo",
+    "status": "received",
+    "message": {
+      "conversation": "Quero reservar o pilates"
+    },
+    "messageType": "conversation",
+    "messageTimestamp": 1772452800,
+    "instanceId": "estudio-sol",
+    "source": "whatsapp"
+  }
+}

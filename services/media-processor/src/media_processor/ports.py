@@ -21,6 +21,9 @@ class MediaStore(Protocol):
 
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
 
+    def get(self, key: str) -> bytes | None:
+        """None se o objeto não existe (expirou pelo ciclo de vida do bucket)."""
+
 
 class Transcriber(Protocol):
     """Transcreve localmente: o áudio do aluno não vai para API de terceiros."""

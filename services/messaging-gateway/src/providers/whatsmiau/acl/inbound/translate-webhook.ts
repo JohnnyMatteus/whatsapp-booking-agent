@@ -47,7 +47,8 @@ function translateUpsert(data: MessagesUpsertData, tenantId: string): WhatsmiauT
   const { key } = data;
   if (key.fromMe === true) return empty([{ reason: 'own_message', detail: key.id }]);
   if (key.remoteJid.endsWith('@g.us')) return empty([{ reason: 'group_chat', detail: key.id }]);
-  // ASSUNÇÃO: só o formato de número (@s.whatsapp.net) é roteável para resposta; @lid fica de fora.
+  // Verificado no fonte do Whatsmiau (convertEventMessage e GetJidLid): `remoteJid` vem como número quando o LID
+  // foi resolvido (e `remoteLid` traz o LID); só LID sem número conhecido chega como `@lid`, e esse não é roteável.
   if (!key.remoteJid.endsWith(USER_JID)) return empty([{ reason: 'unsupported_address', detail: key.id }]);
 
   const origin = {

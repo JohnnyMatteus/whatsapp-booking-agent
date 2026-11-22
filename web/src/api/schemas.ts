@@ -22,6 +22,15 @@ export type SlotCitation = z.infer<typeof SlotCitation>;
 
 const Choice = z.object({ action: z.enum(['book', 'waitlist', 'cancel']), targetId: z.string(), title: z.string(), description: z.string().optional() });
 
+/** Desfecho do processamento da mídia do aluno (media-processor); a miniatura vem por rota autenticada. */
+export const Media = z.object({
+  kind: z.enum(['audio', 'image']),
+  status: z.enum(['processed', 'rejected']),
+  rejectionReason: z.string().nullable(),
+  hasThumbnail: z.boolean(),
+});
+export type Media = z.infer<typeof Media>;
+
 export const TimelineEntry = z.discriminatedUnion('kind', [
   z.object({
     id: z.string(),
@@ -31,6 +40,7 @@ export const TimelineEntry = z.discriminatedUnion('kind', [
     transcribed: z.boolean(),
     messageId: z.string(),
     action: z.object({ action: z.enum(['book', 'cancel', 'waitlist']), targetId: z.string() }).nullable(),
+    media: Media.nullish(),
   }),
   z.object({
     id: z.string(),

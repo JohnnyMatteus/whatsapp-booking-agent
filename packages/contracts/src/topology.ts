@@ -16,6 +16,7 @@ export const Queues = {
       MessageType.CancellationRequested,
       MessageType.WaitlistRequested,
       MessageType.DeliveryStatusChanged,
+      MessageType.MediaProcessed,
     ],
   },
   media: { name: 'media-processor.media', bindings: [MessageType.MediaReceived] },

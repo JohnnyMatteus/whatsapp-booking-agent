@@ -1,8 +1,7 @@
-"""Composição do serviço (esqueleto): consome inbound.media_received e publica os eventos.
+"""Composição do serviço: consome inbound.media_received, processa e publica os eventos.
 
-O consumo usa a mesma topologia do RabbitMQ dos serviços Node (fila quorum, retry e DLQ).
-Nesta fundação o laço de consumo é mínimo; retry com TTL e métricas completas estão em
-Próximos passos no README.
+Mesma topologia do RabbitMQ dos serviços Node (ADR 0006): fila quorum, retry com TTL e DLQ.
+A decisão de cada entrega está em `consumer.py`; aqui ficam só os adaptadores do aio-pika.
 """
 
 from __future__ import annotations
@@ -11,16 +10,19 @@ import asyncio
 import json
 import logging
 import os
+import signal
+import threading
+import time
+from collections.abc import Callable, Mapping
 from typing import Any
 
-from .contracts import ContractViolation
+from .consumer import ConsumerOptions, Delivery, handle_delivery, run_until_stopped
+from .http_api import handle_request
 from .service import ProcessMedia
-
-EXCHANGE = "wba.events"
-QUEUE = "media-processor.media"
+from .topology import BINDINGS, EXCHANGE, QUEUE, queue_arguments
 
 
-def build_service() -> ProcessMedia:
+def build_service(publisher: Any) -> ProcessMedia:
     from .adapters.fake import FakeTranscriber
     from .adapters.gateway_media import GatewayMediaSource
     from .adapters.pillow_thumbnail import PillowThumbnailGenerator
@@ -38,15 +40,37 @@ def build_service() -> ProcessMedia:
         store=S3MediaStore(os.environ["MEDIA_BUCKET"], os.environ.get("S3_ENDPOINT_URL")),
         transcriber=transcriber,
         thumbnails=PillowThumbnailGenerator(),
-        publisher=_LazyPublisher(),
+        publisher=publisher,
     )
 
 
-class _LazyPublisher:
-    """Preenchido com o canal do aio-pika quando o consumidor conecta."""
+def serve_internal_api(port: int, store: Any, token: str, render_metrics: Callable[[], tuple[str, bytes]]) -> None:
+    """Miniaturas e métricas em outra thread: o laço de consumo não espera por requisições HTTP."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    channel: Any = None
-    loop: asyncio.AbstractEventLoop | None = None
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            response = handle_request(
+                self.path, {k.lower(): v for k, v in self.headers.items()}, store, token, render_metrics
+            )
+            self.send_response(response.status)
+            self.send_header("Content-Type", response.content_type)
+            self.send_header("Content-Length", str(len(response.body)))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(response.body)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            """Sem log de acesso: a query leva a chave do armazenamento."""
+
+    threading.Thread(target=ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever, daemon=True).start()
+
+
+class AioPikaPublisher:
+    """Porta `Publisher` síncrona (o caso de uso roda em thread) sobre o canal assíncrono, com confirmação."""
+
+    def __init__(self, channel: Any, loop: asyncio.AbstractEventLoop) -> None:
+        self._channel, self._loop = channel, loop
 
     def publish(self, envelope: dict[str, Any]) -> None:
         import aio_pika
@@ -58,38 +82,97 @@ class _LazyPublisher:
             correlation_id=envelope["correlationId"],
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         )
-        assert self.loop is not None
-        exchange = asyncio.run_coroutine_threadsafe(self.channel.get_exchange(EXCHANGE), self.loop).result()
-        asyncio.run_coroutine_threadsafe(exchange.publish(message, routing_key=envelope["type"]), self.loop).result()
+
+        async def send() -> None:
+            exchange = await self._channel.get_exchange(EXCHANGE)
+            await exchange.publish(message, routing_key=envelope["type"])
+
+        asyncio.run_coroutine_threadsafe(send(), self._loop).result(timeout=30)
 
 
-async def consume() -> None:
+class _Delivery:
+    def __init__(self, message: Any) -> None:
+        self._message = message
+        self.body: bytes = message.body
+        self.headers: Mapping[str, Any] = dict(message.headers or {})
+        self.content_type: str | None = message.content_type
+        self.message_id: str | None = message.message_id
+        self.correlation_id: str | None = message.correlation_id
+
+    async def ack(self) -> None:
+        await self._message.ack()
+
+    async def nack_requeue(self) -> None:
+        await self._message.nack(requeue=True)
+
+
+class _Forwarder:
+    def __init__(self, channel: Any) -> None:
+        self._channel = channel
+
+    async def forward(self, queue: str, delivery: Delivery, headers: dict[str, Any]) -> None:
+        import aio_pika
+
+        message = aio_pika.Message(
+            delivery.body,
+            headers=headers,
+            content_type=delivery.content_type,
+            message_id=delivery.message_id,
+            correlation_id=delivery.correlation_id,
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+        )
+        # Exchange padrão: a routing key é o nome da fila. O canal tem publisher confirms.
+        await self._channel.default_exchange.publish(message, routing_key=queue)
+
+
+async def consume() -> int:
     import aio_pika
+    from prometheus_client import REGISTRY
+    from prometheus_client.exposition import CONTENT_TYPE_LATEST, generate_latest
 
-    service = build_service()
-    publisher = service._publisher
-    assert isinstance(publisher, _LazyPublisher)
+    from .metrics import PrometheusObserver
+
+    max_attempts = int(os.environ.get("CONSUMER_MAX_ATTEMPTS", "4"))
+    retry_delay_ms = int(os.environ.get("CONSUMER_RETRY_DELAY_MS", "3000"))
+    observer = PrometheusObserver(REGISTRY)
+
     connection = await aio_pika.connect_robust(os.environ["RABBITMQ_URL"])
     channel = await connection.channel(publisher_confirms=True)
-    publisher.channel, publisher.loop = channel, asyncio.get_running_loop()
     await channel.set_qos(prefetch_count=1)
     exchange = await channel.declare_exchange(EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
-    queue = await channel.declare_queue(QUEUE, durable=True, arguments={"x-queue-type": "quorum"})
-    await queue.bind(exchange, routing_key="inbound.media_received")
+    queues: dict[str, Any] = {}
+    for name, arguments in queue_arguments(QUEUE, retry_delay_ms).items():
+        queues[name] = await channel.declare_queue(name, durable=True, arguments=arguments)
+    for routing_key in BINDINGS:
+        await queues[QUEUE].bind(exchange, routing_key=routing_key)
 
-    async with queue.iterator() as messages:
-        async for message in messages:
-            try:
-                outcome = await asyncio.to_thread(service.handle, json.loads(message.body))
-                await message.ack()
-                logging.info("media_handled", extra={"outcome": outcome})
-            except ContractViolation:
-                await message.reject(requeue=False)
-            except Exception:
-                logging.exception("media_failed")
-                await message.nack(requeue=True)
+    service = build_service(AioPikaPublisher(channel, asyncio.get_running_loop()))
+    serve_internal_api(
+        int(os.environ.get("PORT", "8083")),
+        service.store,
+        os.environ["MEDIA_API_TOKEN"],
+        lambda: (CONTENT_TYPE_LATEST, generate_latest(REGISTRY)),
+    )
+    options = ConsumerOptions(queue=QUEUE, max_attempts=max_attempts)
+    forwarder = _Forwarder(channel)
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+
+    async with queues[QUEUE].iterator() as messages:
+        logging.info("media_consuming")
+
+        async def drain() -> None:
+            async for message in messages:
+                await handle_delivery(_Delivery(message), service.handle, forwarder, observer, options, time.monotonic)
+
+        code = await run_until_stopped(drain(), stop)
+    await connection.close()
+    return code
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='{"level":"%(levelname)s","msg":"%(message)s"}')
-    asyncio.run(consume())
+    raise SystemExit(asyncio.run(consume()))

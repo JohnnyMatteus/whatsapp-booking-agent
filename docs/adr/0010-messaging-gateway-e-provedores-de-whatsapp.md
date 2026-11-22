@@ -54,7 +54,7 @@ Recomendação: **Cloud API por padrão**; Whatsmiau só por opção explícita 
 
 - Os limites de tamanho de botões e listas são os do WhatsApp (iguais aos da Cloud API); o Whatsmiau não os documenta.
 - O texto pode chegar como `message.conversation` ou `message.extendedTextMessage.text` (convenção Evolution; só o primeiro aparece no modelo lido).
-- Só JIDs de número (`@s.whatsapp.net`) são tratados; `@lid` é ignorado até haver mapeamento para o número.
+- **LID (verificado no fonte do Whatsmiau, `lib/whatsmiau/event_emitter.go` e `GetJidLid`, branch master do repositório `whatsmiau/whatsmiau`, antes `verbeux-ai/whatsmiau`)**: o webhook traz `key.remoteJid` já resolvido para o número (`@s.whatsapp.net`) e `key.remoteLid` com o LID, com `addressingMode` `lid` quando existe LID e `jid` quando não. Esse caso o adaptador já trata (o contato é o número). Só quando o Whatsmiau não conhece o número do LID, `remoteJid` chega como `@lid`: esse caso é ignorado (`unsupported_address`, contado em `wba_webhook_items_total` e logado). Não verificado: se os endpoints de envio aceitam um LID como `number`; por isso não há resposta a `@lid` não resolvido.
 - A fixture de envio de mídia do Whatsmiau não está coberta (o bot não envia mídia).
 - Não foi possível rodar um Whatsmiau real (exige número pareado): o CI usa fixtures no formato documentado e o mock WireMock do profile `whatsmiau`.
 

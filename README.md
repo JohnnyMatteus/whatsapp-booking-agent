@@ -95,6 +95,8 @@ make seed TEXT="me conta uma piada"
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
+O api-gateway lê a chave pública do Keycloak só ao subir: se o Keycloak gerar outro par (volume `keycloak-data` apagado por `make clean`), todo token dá 401 até `docker compose restart api-gateway`.
+
 Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas com datas relativas a hoje. Para usar o SaaS real pela rede compartilhada do portfólio: `make network && make up-portfolio`.
 
 ## Como testar
@@ -147,13 +149,14 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 ## Próximos passos
 
-3. Outbox no booking-agent e serialização por contato na fila.
-4. Templates aprovados para avisar promoção da lista de espera e lembrar aula.
-5. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
-6. media-processor com retry, DLQ, métricas e teste de integração com MinIO; painel exibindo miniaturas a partir de `media.processed`.
-7. Testes de mutação no domínio e de carga no webhook no CI.
-8. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); mapeamento de JIDs `@lid`.
-9. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes) e rotação da chave pública no Kong; deploy com Helm atrás do `platform-edge`.
+1. Outbox no booking-agent e serialização por contato na fila (hoje: publicar antes de salvar e compare-and-set com retry).
+2. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
+3. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
+4. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
+5. Testes de mutação no domínio e de carga no webhook no CI.
+6. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
+7. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
+8. Deploy com Helm atrás do `platform-edge`.
 
 ## Licença
 

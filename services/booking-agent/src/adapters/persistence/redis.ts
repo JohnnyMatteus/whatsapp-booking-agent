@@ -7,6 +7,8 @@ import {
   type ConversationSummary,
   type HandoffQueue,
   type HandoffTicket,
+  type MediaNote,
+  type MediaNotes,
   type MetricIncrement,
   type MetricsStore,
   type NoticeLedger,
@@ -143,5 +145,38 @@ export class RedisNoticeLedger implements NoticeLedger {
 
   async claim(key: string): Promise<boolean> {
     return (await this.redis.set(this.prefix + key, '1', 'EX', CONVERSATION_TTL_SECONDS, 'NX')) === 'OK';
+  }
+}
+
+/** Prazo de retenção da anotação de mídia: o id da mensagem do WhatsApp carrega o telefone do aluno. */
+export const MEDIA_NOTE_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * Uma chave por mensagem, cada uma com o seu prazo de 30 dias a partir do próprio `save`. Um hash por
+ * estúdio com EXPIRE renovaria o prazo a cada nota nova e nada expiraria num estúdio ativo.
+ */
+export class RedisMediaNotes implements MediaNotes {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wba:media-notes:',
+  ) {}
+
+  private key(tenantId: string, messageId: string): string {
+    return `${this.prefix}${tenantId}:${messageId}`;
+  }
+
+  async save(tenantId: string, messageId: string, note: MediaNote): Promise<void> {
+    await this.redis.set(this.key(tenantId, messageId), JSON.stringify(note), 'EX', MEDIA_NOTE_TTL_SECONDS);
+  }
+
+  async find(tenantId: string, messageId: string): Promise<MediaNote | null> {
+    const raw = await this.redis.get(this.key(tenantId, messageId));
+    return raw ? (JSON.parse(raw) as MediaNote) : null;
+  }
+
+  async findMany(tenantId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, MediaNote>> {
+    if (messageIds.length === 0) return new Map();
+    const raw = await this.redis.mget(...messageIds.map((id) => this.key(tenantId, id)));
+    return new Map(messageIds.flatMap((id, i) => (raw[i] ? [[id, JSON.parse(raw[i]) as MediaNote] as const] : [])));
   }
 }
