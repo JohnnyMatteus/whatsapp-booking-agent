@@ -1,0 +1,10 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "120363000000000001@g.us", "fromMe": false, "id": "3EB0A0000000000000000007", "participant": "5511900000003@s.whatsapp.net" },
+    "message": { "conversation": "oi grupo" },
+    "messageType": "conversation",
+    "messageTimestamp": 1772453010
+  }
+}

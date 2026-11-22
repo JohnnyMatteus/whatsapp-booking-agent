@@ -4,10 +4,11 @@
 
 ## Serviços e contratos afetados
 
-- [ ] whatsapp-gateway (webhook, sender, ACL da Cloud API)
+- [ ] messaging-gateway (provedores, webhook, sender, ACLs)
+- [ ] api-gateway (Kong)
 - [ ] booking-agent (domínio, agente, adaptadores)
 - [ ] saas-mcp-server (ferramentas MCP, ACL do SaaS)
-- [ ] transcription-worker
+- [ ] media-processor
 - [ ] web (painel)
 - [ ] contratos da fila (`packages/contracts`) ou topologia do RabbitMQ
 - [ ] infraestrutura (compose, mocks, observabilidade)

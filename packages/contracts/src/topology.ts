@@ -18,8 +18,8 @@ export const Queues = {
       MessageType.DeliveryStatusChanged,
     ],
   },
-  transcription: { name: 'transcription-worker.audio', bindings: [MessageType.AudioReceived] },
-  sender: { name: 'whatsapp-sender.replies', bindings: [MessageType.ReplyRequested] },
+  media: { name: 'media-processor.media', bindings: [MessageType.MediaReceived] },
+  sender: { name: 'messaging-sender.replies', bindings: [MessageType.ReplyRequested] },
   attendance: { name: 'attendance.handoffs', bindings: [MessageType.HandoffRequested] },
 } as const satisfies Record<string, QueueSpec>;
 

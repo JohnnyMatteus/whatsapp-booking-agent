@@ -5,10 +5,13 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: whatsapp-webhook
-    static_configs: [{ targets: ["whatsapp-webhook:8080"] }]
-  - job_name: whatsapp-sender
-    static_configs: [{ targets: ["whatsapp-sender:8082"] }]
+  - job_name: messaging-webhook
+    static_configs: [{ targets: ["messaging-webhook:8080"] }]
+  - job_name: messaging-sender
+    static_configs: [{ targets: ["messaging-sender:8082"] }]
+  - job_name: api-gateway
+    metrics_path: /metrics
+    static_configs: [{ targets: ["api-gateway:8100"] }]
   - job_name: booking-agent
     static_configs: [{ targets: ["booking-agent:8081"] }]
   - job_name: saas-mcp-server

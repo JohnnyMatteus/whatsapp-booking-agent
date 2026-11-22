@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ContractViolation, createEnvelope, MessageType, parseEnvelope } from '../src/index.js';
+import { Queues } from '../src/topology.js';
 
 const meta = { id: '0b4f3a52-8d1c-4f43-9a55-2d9a3f0c1e77', correlationId: 'wamid.TESTE1', occurredAt: new Date('2026-03-02T12:00:00Z') };
 const origin = { tenantId: 'estudio-lotus', contactId: '5511900000001', messageId: 'wamid.TESTE1', receivedAt: '2026-03-02T12:00:00Z' };
@@ -33,5 +34,24 @@ describe('envelope do contrato', () => {
     expect(() =>
       createEnvelope(MessageType.ReplyRequested, { tenantId: 't', contactId: 'c', content: { kind: 'choices', body: 'Escolha', choices } }, meta),
     ).toThrow();
+  });
+});
+
+describe('mídia', () => {
+  it('MediaReceived e MediaProcessed fazem ida e volta e usam a fila do media-processor', () => {
+    const received = createEnvelope(MessageType.MediaReceived, { ...origin, kind: 'image', mediaId: 'm-1', mimeType: 'image/jpeg' }, meta);
+    const processed = createEnvelope(
+      MessageType.MediaProcessed,
+      { ...origin, kind: 'image', status: 'processed', mimeType: 'image/jpeg', transcribed: false, sizeBytes: 10, storageKey: 'media/a', thumbnailKey: 'media/a.thumb.jpg' },
+      meta,
+    );
+
+    expect(parseEnvelope(JSON.parse(JSON.stringify(received))).type).toBe(MessageType.MediaReceived);
+    expect(parseEnvelope(JSON.parse(JSON.stringify(processed))).payload).toMatchObject({ transcribed: false, status: 'processed' });
+    expect(Queues.media.bindings).toEqual([MessageType.MediaReceived]);
+  });
+
+  it('rejeita tipo de mídia fora de áudio e imagem', () => {
+    expect(() => createEnvelope(MessageType.MediaReceived, { ...origin, kind: 'video' as 'audio', mediaId: 'm', mimeType: 'video/mp4' }, meta)).toThrow();
   });
 });

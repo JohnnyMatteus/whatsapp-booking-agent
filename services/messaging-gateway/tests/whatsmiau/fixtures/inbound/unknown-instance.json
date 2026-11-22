@@ -1,0 +1,10 @@
+{
+  "event": "messages.upsert",
+  "instance": "instancia-desconhecida",
+  "data": {
+    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000008" },
+    "message": { "conversation": "oi" },
+    "messageType": "conversation",
+    "messageTimestamp": 1772453020
+  }
+}

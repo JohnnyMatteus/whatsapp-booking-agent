@@ -1,6 +1,6 @@
 packages:
   - packages/*
-  - services/whatsapp-gateway
+  - services/messaging-gateway
   - services/booking-agent
   - web
 

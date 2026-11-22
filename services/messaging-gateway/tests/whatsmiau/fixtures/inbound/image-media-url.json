@@ -1,0 +1,13 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000002@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000003" },
+    "message": {
+      "imageMessage": { "mimetype": "image/jpeg", "caption": "comprovante", "width": 640, "height": 480 },
+      "mediaUrl": "https://midia.exemplo.test/bucket/img-0003.jpg"
+    },
+    "messageType": "imageMessage",
+    "messageTimestamp": 1772452900
+  }
+}

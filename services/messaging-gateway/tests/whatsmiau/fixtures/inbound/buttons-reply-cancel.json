@@ -1,0 +1,10 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000005" },
+    "message": { "buttonsResponseMessage": { "selectedButtonId": "v1:cx:01JNX0000000000000BOOKING", "selectedDisplayText": "Cancelar" } },
+    "messageType": "buttonsResponseMessage",
+    "messageTimestamp": 1772452960
+  }
+}

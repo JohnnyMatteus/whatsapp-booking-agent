@@ -50,8 +50,8 @@ jobs:
       - name: Testes
         run: pnpm --filter @wba/contracts --filter @wba/messaging test
 
-  whatsapp-gateway:
-    name: whatsapp-gateway (webhook e sender)
+  messaging-gateway:
+    name: messaging-gateway (provedores, webhook e sender)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -65,15 +65,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: pnpm --filter @wba/whatsapp-gateway typecheck
-      - name: Testes unitários e de contrato da ACL
-        run: pnpm --filter @wba/whatsapp-gateway test
+        run: pnpm --filter @wba/messaging-gateway typecheck
+      - name: Testes unitários e de contrato das ACLs (Cloud API e Whatsmiau)
+        run: pnpm --filter @wba/messaging-gateway test
       - name: Integração (Redis e RabbitMQ reais via testcontainers)
-        run: pnpm --filter @wba/whatsapp-gateway test:integration
+        run: pnpm --filter @wba/messaging-gateway test:integration
       - name: Build
-        run: pnpm --filter @wba/whatsapp-gateway build
+        run: pnpm --filter @wba/messaging-gateway build
       - name: Imagem Docker
-        run: docker build -f services/whatsapp-gateway/Dockerfile -t whatsapp-booking-agent/whatsapp-gateway:ci .
+        run: docker build -f services/messaging-gateway/Dockerfile -t whatsapp-booking-agent/messaging-gateway:ci .
 
   booking-agent:
     name: booking-agent (domínio, agente e adaptadores)
@@ -125,13 +125,13 @@ jobs:
       - name: Imagem Docker
         run: docker build -t whatsapp-booking-agent/saas-mcp-server:ci .
 
-  transcription-worker:
-    name: transcription-worker (Python)
+  media-processor:
+    name: media-processor (Python)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: services/transcription-worker
+        working-directory: services/media-processor
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,10 +143,39 @@ jobs:
         run: make install
       - name: Lint (ruff + mypy estrito)
         run: make lint
-      - name: Testes (transcritor falso)
+      - name: Testes (transcritor falso, miniatura com Pillow)
         run: make test
       - name: Imagem Docker
-        run: docker build -t whatsapp-booking-agent/transcription-worker:ci .
+        run: docker build -t whatsapp-booking-agent/media-processor:ci .
+
+  api-gateway:
+    name: "api-gateway (Kong DB-less: configuração e smoke das políticas)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Imagem Docker
+        run: docker build -t whatsapp-booking-agent/api-gateway:ci infra/gateway
+      - name: kong config parse
+        run: |
+          set -o pipefail
+          {
+            sed -e 's|__PANEL_API_TOKEN__|dev-only-panel-token|g' -e 's|__PANEL_JWT_SECRET__|dev-only-panel-jwt-secret-change-me|g' infra/gateway/kong.yaml > "$RUNNER_TEMP/kong.yaml"
+            docker run --rm --entrypoint kong -e KONG_DATABASE=off -v "$RUNNER_TEMP/kong.yaml:/tmp/kong.yaml:ro" whatsapp-booking-agent/api-gateway:ci config parse /tmp/kong.yaml
+          } 2>&1 | tee "$RUNNER_TEMP/kong-config.log"
+      - name: Smoke das políticas (JWT, webhooks sem JWT, rotas internas fora, limite de corpo)
+        run: |
+          set -o pipefail
+          {
+            docker run -d --name gw -p 8000:8000 -e PANEL_API_TOKEN=dev-only-panel-token -e PANEL_JWT_SECRET=dev-only-panel-jwt-secret-change-me whatsapp-booking-agent/api-gateway:ci
+            for i in $(seq 1 30); do docker exec gw kong health >/dev/null 2>&1 && break; sleep 2; done
+            infra/gateway/smoke.sh http://127.0.0.1:8000 || { docker logs gw; exit 1; }
+          } 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py api-gateway "$RUNNER_TEMP/kong-config.log" "$RUNNER_TEMP/smoke.log"
 
   web:
     name: web (painel Vue)
@@ -181,13 +210,26 @@ jobs:
           persist-credentials: false
       - name: docker compose config (todos os profiles e o override do portfólio)
         run: |
-          docker compose --profile core --profile observability --profile llm --profile tools config -q
-          docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
+          set -o pipefail
+          {
+            docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
+            docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
+          } 2>&1 | tee "$RUNNER_TEMP/compose.log"
       - name: promtool valida configuração e alertas
         run: |
-          docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
-          docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
+          set -o pipefail
+          {
+            docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+            docker run --rm --entrypoint promtool -v "$PWD/infra/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
+          } 2>&1 | tee "$RUNNER_TEMP/promtool.log"
       - name: Mapeamentos do WireMock são JSON válido
-        run: for f in infra/wiremock/*/mappings/*.json; do python3 -m json.tool "$f" > /dev/null; done
+        run: |
+          set -o pipefail
+          for f in infra/wiremock/*/mappings/*.json; do python3 -m json.tool "$f" > /dev/null || { echo "FALHA JSON inválido: $f"; exit 1; }; done 2>&1 | tee "$RUNNER_TEMP/wiremock.log"
       - name: ShellCheck
-        run: shellcheck scripts/*.sh infra/minio/*.sh
+        run: |
+          set -o pipefail
+          shellcheck scripts/*.sh infra/minio/*.sh infra/gateway/*.sh 2>&1 | tee "$RUNNER_TEMP/shellcheck.log"
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py infraestrutura "$RUNNER_TEMP/compose.log" "$RUNNER_TEMP/promtool.log" "$RUNNER_TEMP/wiremock.log" "$RUNNER_TEMP/shellcheck.log"

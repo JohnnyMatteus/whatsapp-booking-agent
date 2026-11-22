@@ -4,7 +4,7 @@ server {
 
   location /api/ {
     proxy_pass ${BOOKING_AGENT_URL};
-    proxy_set_header Authorization "Bearer ${PANEL_API_TOKEN}";
+    proxy_set_header Authorization "Bearer ${PANEL_JWT}";
     proxy_set_header Host $host;
   }
 

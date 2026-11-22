@@ -1,0 +1,17 @@
+{
+  "path": "sendList",
+  "body": {
+    "number": "5511900000001",
+    "description": "Estas são as aulas de amanhã:",
+    "buttonText": "Ver opções",
+    "sections": [
+      {
+        "title": "Aulas",
+        "rows": [
+          { "title": "Hatha yoga", "rowId": "v1:bk:ses-1", "description": "amanhã às 09:00, 3 vagas" },
+          { "title": "Pilates solo", "rowId": "v1:bk:ses-2", "description": "amanhã às 18:30, 1 vaga" }
+        ]
+      }
+    ]
+  }
+}

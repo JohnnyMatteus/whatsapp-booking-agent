@@ -1,0 +1,11 @@
+{
+  "path": "sendButtons",
+  "body": {
+    "number": "5511900000001",
+    "description": "Confirmar a reserva?",
+    "buttons": [
+      { "type": "reply", "displayText": "Reservar", "id": "v1:bk:ses-1" },
+      { "type": "reply", "displayText": "Lista de espera", "id": "v1:wl:ses-1" }
+    ]
+  }
+}

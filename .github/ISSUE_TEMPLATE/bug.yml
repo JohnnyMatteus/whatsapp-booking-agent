@@ -6,7 +6,7 @@ body:
     id: service
     attributes:
       label: Serviço
-      options: [whatsapp-gateway, booking-agent, saas-mcp-server, transcription-worker, web, infraestrutura]
+      options: [api-gateway, messaging-gateway, booking-agent, saas-mcp-server, media-processor, web, infraestrutura]
     validations:
       required: true
   - type: textarea

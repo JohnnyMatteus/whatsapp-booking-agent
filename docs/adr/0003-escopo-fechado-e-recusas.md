@@ -1,4 +1,4 @@
-# ADR 0003: Somente a Cloud API oficial e escopo fechado em aulas e reservas
+# ADR 0003: Cloud API oficial como padrão e escopo fechado em aulas e reservas
 
 **Status:** Aceito
 
@@ -10,7 +10,7 @@
 
 ## Decisão
 
-1. **Somente a Cloud API oficial** (Graph API, token de sistema, webhook assinado). A URL base é configurável apenas para apontar para o mock em desenvolvimento.
+1. **A Cloud API oficial é o padrão** (Graph API, token de sistema, webhook assinado). A URL base é configurável apenas para apontar para o mock em desenvolvimento. *Emenda (ADR 0010):* o estúdio pode optar, por configuração, pelo Whatsmiau, provedor não oficial, ciente dos riscos de banimento e de violação dos termos; bibliotecas de WhatsApp Web continuam proibidas dentro dos nossos serviços (o Whatsmiau é um servidor externo, atrás da porta `MessagingProvider`).
 2. **Escopo fechado**: o bot trata horários, reserva, cancelamento e lista de espera. Todo o resto recebe uma recusa educada com o menu do que ele faz.
 3. **Decisão em duas camadas**:
    - `classifyScope` (domínio, determinístico) roda primeiro, com ordem fixa: pedido de humano > tema sensível > fora do escopo > intenção explícita. Casos claros são decididos aqui, sem LLM.

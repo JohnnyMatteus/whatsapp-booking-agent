@@ -1,6 +1,6 @@
 // Linguagem publicada do contexto de Agendamento (ADR 0002 e 0006).
 //
-// É o único vocabulário que trafega no RabbitMQ. Os tradutores da ACL convertem a Cloud API
+// É o único vocabulário que trafega no RabbitMQ. Os tradutores da ACL de cada provedor convertem o WhatsApp
 // e o SaaS para estes tipos; nenhum serviço publica payload da Meta ou do SaaS na fila.
 import { z } from 'zod';
 
@@ -11,11 +11,12 @@ export const EXCHANGE = 'wba.events';
 
 export const MessageType = {
   MessageReceived: 'inbound.message_received',
-  AudioReceived: 'inbound.audio_received',
+  MediaReceived: 'inbound.media_received',
   BookingRequested: 'inbound.booking_requested',
   CancellationRequested: 'inbound.cancellation_requested',
   WaitlistRequested: 'inbound.waitlist_requested',
   DeliveryStatusChanged: 'inbound.delivery_status_changed',
+  MediaProcessed: 'media.processed',
   ReplyRequested: 'outbound.reply_requested',
   HandoffRequested: 'attendance.handoff_requested',
 } as const;
@@ -44,11 +45,32 @@ export const MessageReceived = Origin.extend({
 });
 export type MessageReceived = z.infer<typeof MessageReceived>;
 
-export const AudioReceived = Origin.extend({
+export const MediaKind = z.enum(['audio', 'image']);
+export type MediaKind = z.infer<typeof MediaKind>;
+
+/** Mídia recebida do aluno. `mediaId` só faz sentido para o messaging-gateway, que a resolve em bytes. */
+export const MediaReceived = Origin.extend({
+  kind: MediaKind,
   mediaId: id,
   mimeType: z.string().max(128),
 });
-export type AudioReceived = z.infer<typeof AudioReceived>;
+export type MediaReceived = z.infer<typeof MediaReceived>;
+
+export const MediaRejectionReason = z.enum(['unsupported_type', 'too_large', 'type_mismatch', 'corrupt', 'unavailable']);
+export type MediaRejectionReason = z.infer<typeof MediaRejectionReason>;
+
+/** Desfecho do processamento da mídia (MidiaProcessada). As chaves apontam para o armazenamento S3. */
+export const MediaProcessed = Origin.extend({
+  kind: MediaKind,
+  status: z.enum(['processed', 'rejected']),
+  mimeType: z.string().max(128),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  storageKey: z.string().min(1).max(512).optional(),
+  thumbnailKey: z.string().min(1).max(512).optional(),
+  transcribed: z.boolean().default(false),
+  rejectionReason: MediaRejectionReason.optional(),
+});
+export type MediaProcessed = z.infer<typeof MediaProcessed>;
 
 export const BookingRequested = Origin.extend({ sessionId: id, source: ActionSource });
 export type BookingRequested = z.infer<typeof BookingRequested>;
@@ -80,7 +102,7 @@ export const Choice = z.object({
 });
 export type Choice = z.infer<typeof Choice>;
 
-/** Conteúdo neutro de saída. O tradutor do sender decide se vira texto, botões ou lista da Cloud API. */
+/** Conteúdo neutro de saída. O adaptador do provedor decide se vira texto, botões ou lista. */
 /** Templates aprovados na Meta para mensagens iniciadas pelo estúdio (fora da janela de 24 h). */
 export const TemplateName = z.enum(['lembrete_aula', 'vaga_liberada']);
 export type TemplateName = z.infer<typeof TemplateName>;
@@ -118,11 +140,12 @@ export type HandoffRequested = z.infer<typeof HandoffRequested>;
 
 const payloadSchemas = {
   [MessageType.MessageReceived]: MessageReceived,
-  [MessageType.AudioReceived]: AudioReceived,
+  [MessageType.MediaReceived]: MediaReceived,
   [MessageType.BookingRequested]: BookingRequested,
   [MessageType.CancellationRequested]: CancellationRequested,
   [MessageType.WaitlistRequested]: WaitlistRequested,
   [MessageType.DeliveryStatusChanged]: DeliveryStatusChanged,
+  [MessageType.MediaProcessed]: MediaProcessed,
   [MessageType.ReplyRequested]: ReplyRequested,
   [MessageType.HandoffRequested]: HandoffRequested,
 } as const satisfies Record<MessageType, z.ZodType>;
