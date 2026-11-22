@@ -22,8 +22,11 @@ expect "webhook da Cloud API não exige JWT" '502|503|504' "$(code -X POST -H 'C
 expect "webhook do Whatsmiau não exige JWT" '502|503|504' "$(code -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/webhooks/whatsmiau")"
 expect "API interna de mídia não é exposta" 404 "$(code "$BASE/internal/media/estudio-lotus/1")"
 expect "rota desconhecida" 404 "$(code "$BASE/qualquer")"
-big=$(head -c 300000 /dev/zero | tr '\0' 'a')
-expect "webhook da Cloud API acima de 256 KB é recusado" 413 "$(code -X POST -H 'Content-Type: application/json' --data "$big" "$BASE/webhooks/cloud-api")"
+# O corpo vai por arquivo: no Linux um argumento passa de 128 KiB e o execve falha (E2BIG) antes do curl.
+BIG_FILE="$(mktemp)"
+trap 'rm -f "$BIG_FILE"' EXIT
+head -c 300000 /dev/zero | tr '\0' 'a' > "$BIG_FILE"
+expect "webhook da Cloud API acima de 256 KB é recusado" 413 "$(code -X POST -H 'Content-Type: application/json' --data-binary "@$BIG_FILE" "$BASE/webhooks/cloud-api")"
 # Informativo: os cabeçalhos de cota dependem da versão do Kong e de a resposta vir do upstream.
 curl -s -D - -o /dev/null -H "Authorization: Bearer $TOKEN" "$BASE/api/queue" | tr -d '\r' | grep -i 'ratelimit' || echo "aviso: sem cabeçalhos de cota na resposta"
 exit "$fail"
