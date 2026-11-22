@@ -105,7 +105,9 @@ Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas 
 make lint             # ESLint, typecheck (tsc e vue-tsc), gofmt + go vet, ruff + mypy
 make test             # unitários e de contrato, sem Docker e sem LLM real
 make test-integration # Redis e RabbitMQ reais via testcontainers (roda no CI)
-# o CI também valida o Kong (kong config parse + smoke) e o compose com todos os profiles
+# o CI também valida o Kong (kong config parse + smoke) e o compose com todos os profiles, e o job e2e sobe o profile core
+# (Keycloak e Kong reais) e roda scripts/e2e.sh (webhook assinado até a resposta no mock da Cloud API, idempotência, painel
+# autenticado, isolamento entre estúdios) e a carga no webhook com k6 (infra/load/webhook.js, 100 req/s por 20 s)
 ```
 
 O que vale olhar:
@@ -152,7 +154,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 1. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
 2. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
 3. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
-4. Testes de mutação no domínio e de carga no webhook no CI.
+4. Testes de mutação no domínio (Stryker): falta adicionar a dependência e o lockfile, o que exige instalar pacotes.
 5. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
 6. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
 7. Deploy com Helm atrás do `platform-edge`.

@@ -248,3 +248,31 @@ jobs:
       - name: Diagnóstico dos passos que falharam
         if: failure()
         run: python3 scripts/ci-annotate.py infraestrutura "$RUNNER_TEMP/compose.log" "$RUNNER_TEMP/promtool.log" "$RUNNER_TEMP/wiremock.log" "$RUNNER_TEMP/shellcheck.log"
+
+  e2e:
+    name: ponta a ponta (compose real, Keycloak, Kong) e carga no webhook
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Sobe o profile core (build das imagens, healthchecks, Keycloak com o realm importado)
+        run: docker compose --profile core up -d --build --wait --wait-timeout 900
+      - name: Ponta a ponta (webhook assinado até a resposta no mock da Cloud API, painel por Keycloak, isolamento)
+        run: |
+          set -o pipefail
+          scripts/e2e.sh 2>&1 | tee "$RUNNER_TEMP/e2e.log"
+      - name: Carga no webhook (k6, 100 req/s por 20 s)
+        run: |
+          set -o pipefail
+          docker run --rm --network whatsapp-booking-net -v "$PWD/infra/load:/scripts:ro" grafana/k6:1.0.0 run /scripts/webhook.js 2>&1 | tee "$RUNNER_TEMP/k6.log"
+      - name: Logs dos serviços quando algo falhou
+        if: failure()
+        run: docker compose --profile core logs --no-color --tail=200
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py e2e "$RUNNER_TEMP/e2e.log" "$RUNNER_TEMP/k6.log"
+      - name: Derruba o ambiente
+        if: always()
+        run: docker compose --profile core down -v --remove-orphans
