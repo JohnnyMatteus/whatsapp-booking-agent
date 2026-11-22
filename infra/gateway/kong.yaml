@@ -1,0 +1,113 @@
+# Configuração declarativa do api-gateway (Kong OSS, modo DB-less; ADR 0012).
+# Fonte da verdade das políticas de borda: roteamento, rate limit e JWT do painel.
+# Os marcadores __NOME__ são trocados pelo entrypoint a partir do ambiente (o Kong não
+# interpola variáveis no arquivo declarativo).
+_format_version: "3.0"
+_transform: true
+
+services:
+  # Webhooks públicos dos provedores. Sem JWT: quem chama é o provedor, e cada um se autentica
+  # no messaging-gateway (HMAC da Meta; segredo no cabeçalho da instância do Whatsmiau).
+  - name: messaging-webhook
+    protocol: http
+    host: messaging-webhook
+    port: 8080
+    connect_timeout: 2000
+    read_timeout: 10000
+    write_timeout: 10000
+    # Sem retry: o provedor reentrega e a idempotência está no gateway de mensagens.
+    retries: 0
+    routes:
+      - name: webhook-cloud-api
+        paths: [/webhooks/cloud-api]
+        methods: [GET, POST]
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config: &webhook_rate
+              minute: 600
+              limit_by: ip
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+              error_code: 429
+              error_message: Rate limit exceeded
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 256
+              size_unit: kilobytes
+              require_content_length: false
+      - name: webhook-whatsmiau
+        paths: [/webhooks/whatsmiau]
+        methods: [POST]
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config: *webhook_rate
+          # O Whatsmiau pode embutir mídia em base64 no corpo.
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 20
+              size_unit: megabytes
+              require_content_length: false
+
+  # API do painel. O JWT é validado aqui; o booking-agent continua recebendo o seu token de
+  # serviço, injetado pelo gateway (o token do painel não chega ao navegador nem ao upstream).
+  - name: booking-agent-panel
+    protocol: http
+    host: booking-agent
+    port: 8081
+    connect_timeout: 2000
+    read_timeout: 10000
+    write_timeout: 10000
+    retries: 0
+    routes:
+      - name: panel-api
+        paths: [/api]
+        methods: [GET, POST, PUT, PATCH, DELETE]
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              header_names: [authorization]
+              uri_param_names: []
+              cookie_names: []
+              key_claim_name: iss
+              # Em desenvolvimento o token do painel não expira (ver scripts/mint-panel-jwt.sh).
+              # Produção: claims_to_verify [exp] e maximum_expiration, com o IdP emitindo (ADR 0012).
+              run_on_preflight: false
+          - name: rate-limiting
+            config:
+              minute: 120
+              limit_by: consumer
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+              error_code: 429
+              error_message: Rate limit exceeded
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 64
+              size_unit: kilobytes
+              require_content_length: false
+          - name: request-transformer
+            config:
+              remove:
+                headers: [authorization]
+              add:
+                headers: ["Authorization:Bearer __PANEL_API_TOKEN__"]
+
+# Não há rota para /internal (mídia e avisos): são APIs entre serviços, só na rede interna.
+
+consumers:
+  - username: painel
+    jwt_secrets:
+      - key: wba-panel
+        algorithm: HS256
+        secret: "__PANEL_JWT_SECRET__"
+
+plugins:
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true

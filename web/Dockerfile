@@ -8,8 +8,8 @@ WORKDIR /repo
 COPY . .
 RUN pnpm install --frozen-lockfile && pnpm --filter @wba/web build
 
-# nginx serve o SPA e faz proxy de /api para o booking-agent, injetando o token do painel
-# do lado do servidor (o token não vai para o navegador).
+# nginx serve o SPA e faz proxy de /api para o api-gateway, injetando o JWT do painel
+# do lado do servidor (o token não vai para o navegador). O gateway valida o JWT.
 FROM nginx:1.27.5-alpine
 COPY infra/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /repo/web/dist /usr/share/nginx/html

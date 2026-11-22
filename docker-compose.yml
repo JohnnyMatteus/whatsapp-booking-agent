@@ -1,5 +1,5 @@
 # Ambiente local do whatsapp-booking-agent (ADR 0007).
-#   core:          serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
+#   core:          api-gateway, serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
 #   whatsmiau:     mock do Whatsmiau (provedor alternativo, ADR 0010); troque TENANT_CHANNELS para usá-lo
 #   observability: Prometheus, Jaeger e Grafana
 #   llm:           Ollama para o LLM local (opcional; qualquer API compatível com OpenAI serve)
@@ -182,8 +182,6 @@ services:
     environment:
       <<: *gateway-env
       PORT: "8080"
-    ports:
-      - "127.0.0.1:${WEBHOOK_PORT:-8080}:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -194,6 +192,30 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  # Única entrada pública (ADR 0012): webhooks dos provedores, API do painel, rate limit e JWT.
+  api-gateway:
+    build: ./infra/gateway
+    image: whatsapp-booking-agent/api-gateway:dev
+    profiles: [core]
+    restart: unless-stopped
+    environment:
+      PANEL_API_TOKEN: ${PANEL_API_TOKEN:-dev-only-panel-token}
+      PANEL_JWT_SECRET: ${PANEL_JWT_SECRET:-dev-only-panel-jwt-secret-change-me}
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8000}:8000"
+    networks: [booking-net]
+    depends_on:
+      messaging-webhook:
+        condition: service_healthy
+      booking-agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   messaging-sender:
     <<: *node-service
@@ -282,13 +304,14 @@ services:
     profiles: [core]
     restart: unless-stopped
     environment:
-      BOOKING_AGENT_URL: http://booking-agent:8081
-      PANEL_API_TOKEN: ${PANEL_API_TOKEN:-dev-only-panel-token}
+      # O painel fala só com o api-gateway, que valida o JWT (token de desenvolvimento, sem expiração).
+      BOOKING_AGENT_URL: http://api-gateway:8000
+      PANEL_JWT: ${PANEL_JWT:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ3YmEtcGFuZWwiLCJzdWIiOiJwYWluZWwifQ.b4tbYwGZ2cgvEaj-VkoCx5QZUQdTcK09BEMgmSKxYRs}
     ports:
       - "127.0.0.1:${WEB_PORT:-5173}:8080"
     networks: [booking-net]
     depends_on:
-      booking-agent:
+      api-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]

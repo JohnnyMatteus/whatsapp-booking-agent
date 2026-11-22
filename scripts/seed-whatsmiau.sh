@@ -4,7 +4,7 @@
 # Requer o estúdio estudio-sol no TENANT_CHANNELS (make up-whatsmiau).
 set -euo pipefail
 
-WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:${WEBHOOK_PORT:-8080}/webhooks/whatsmiau}"
+WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:${GATEWAY_PORT:-8000}/webhooks/whatsmiau}"
 SECRET="${WHATSMIAU_WEBHOOK_SECRET:-dev-only-whatsmiau-webhook-secret}"
 INSTANCE="${INSTANCE:-estudio-sol}"
 TEXT="${1:-Quais horários tem amanhã?}"

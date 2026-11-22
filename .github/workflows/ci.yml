@@ -148,6 +148,26 @@ jobs:
       - name: Imagem Docker
         run: docker build -t whatsapp-booking-agent/media-processor:ci .
 
+  api-gateway:
+    name: api-gateway (Kong DB-less: configuração e smoke das políticas)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Imagem Docker
+        run: docker build -t whatsapp-booking-agent/api-gateway:ci infra/gateway
+      - name: kong config parse
+        run: |
+          sed -e 's|__PANEL_API_TOKEN__|dev-only-panel-token|g' -e 's|__PANEL_JWT_SECRET__|dev-only-panel-jwt-secret-change-me|g' infra/gateway/kong.yaml > "$RUNNER_TEMP/kong.yaml"
+          docker run --rm --entrypoint kong -e KONG_DATABASE=off -v "$RUNNER_TEMP/kong.yaml:/tmp/kong.yaml:ro" whatsapp-booking-agent/api-gateway:ci config parse /tmp/kong.yaml
+      - name: Smoke das políticas (JWT, webhooks sem JWT, rotas internas fora, limite de corpo)
+        run: |
+          docker run -d --name gw -p 8000:8000 -e PANEL_API_TOKEN=dev-only-panel-token -e PANEL_JWT_SECRET=dev-only-panel-jwt-secret-change-me whatsapp-booking-agent/api-gateway:ci
+          for i in $(seq 1 30); do docker exec gw kong health >/dev/null 2>&1 && break; sleep 2; done
+          infra/gateway/smoke.sh http://127.0.0.1:8000 || { docker logs gw; exit 1; }
+
   web:
     name: web (painel Vue)
     runs-on: ubuntu-latest
@@ -190,4 +210,4 @@ jobs:
       - name: Mapeamentos do WireMock são JSON válido
         run: for f in infra/wiremock/*/mappings/*.json; do python3 -m json.tool "$f" > /dev/null; done
       - name: ShellCheck
-        run: shellcheck scripts/*.sh infra/minio/*.sh
+        run: shellcheck scripts/*.sh infra/minio/*.sh infra/gateway/*.sh
