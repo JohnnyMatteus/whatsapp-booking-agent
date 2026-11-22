@@ -14,9 +14,10 @@ type Agenda interface {
 	MyBookings(ctx context.Context, m Member) ([]Reserva, error)
 	Book(ctx context.Context, m Member, sessionID string) (Reserva, error)
 	Cancel(ctx context.Context, m Member, bookingID string) (Cancelamento, error)
+	ConfirmLink(ctx context.Context, m Member, code string) (VinculoConfirmado, error)
 }
 
-// Service implementa as quatro ferramentas sobre a porta Agenda.
+// Service implementa as cinco ferramentas sobre a porta Agenda.
 type Service struct {
 	agenda Agenda
 	now    func() time.Time
@@ -100,4 +101,15 @@ func (s *Service) EntrarListaEspera(ctx context.Context, m Member, aulaID string
 	}
 	// Se uma vaga abrir entre a consulta e o pedido, o SaaS confirma: melhor para o aluno.
 	return s.agenda.Book(ctx, m, aulaID)
+}
+
+var sixDigits = regexp.MustCompile(`^\d{6}$`)
+
+// VincularContato confirma o código de opt-in que o aluno gerou no SaaS, a partir do
+// telefone de quem o enviou.
+func (s *Service) VincularContato(ctx context.Context, m Member, codigo string) (VinculoConfirmado, error) {
+	if !sixDigits.MatchString(codigo) {
+		return VinculoConfirmado{}, NewError(CodeCodigoInvalido, "o código tem 6 dígitos")
+	}
+	return s.agenda.ConfirmLink(ctx, m, codigo)
 }

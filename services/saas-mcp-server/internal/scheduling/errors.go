@@ -19,6 +19,8 @@ const (
 	CodeNaoEncontrado    Code = "nao_encontrado"
 	CodeAcessoNegado     Code = "acesso_negado"
 	CodeEntradaInvalida  Code = "entrada_invalida"
+	CodeNaoVinculado     Code = "contato_nao_vinculado"
+	CodeCodigoInvalido   Code = "codigo_vinculo_invalido"
 	CodeSaasIndisponivel Code = "saas_indisponivel"
 	CodeErroInesperado   Code = "erro_inesperado"
 )

@@ -31,6 +31,8 @@ type config struct {
 	saasBaseURL  string
 	authToken    string
 	devTokens    map[string]string
+	tokenURL     string
+	clients      map[string]identity.ClientCredentials
 	otlpEndpoint string
 }
 
@@ -47,7 +49,20 @@ func loadConfig() (config, error) {
 	if err := json.Unmarshal([]byte(envOr("SAAS_DEV_TOKENS", "{}")), &c.devTokens); err != nil {
 		return c, fmt.Errorf("SAAS_DEV_TOKENS deve ser um objeto JSON estúdio -> token: %w", err)
 	}
+	c.tokenURL = os.Getenv("SAAS_TOKEN_URL")
+	if err := json.Unmarshal([]byte(envOr("SAAS_AGENT_CLIENTS", "{}")), &c.clients); err != nil {
+		return c, fmt.Errorf("SAAS_AGENT_CLIENTS deve ser um objeto JSON estúdio -> {client_id, client_secret}: %w", err)
+	}
 	return c, nil
+}
+
+// tokenSource usa a conta de serviço por estúdio no Keycloak quando SAAS_TOKEN_URL está
+// definida; sem ela, cai nos tokens de desenvolvimento (mock do SaaS).
+func tokenSource(c config) (identity.TokenSource, error) {
+	if c.tokenURL == "" {
+		return identity.NewStaticTokenSource(c.devTokens), nil
+	}
+	return identity.NewClientCredentialsSource(c.tokenURL, c.clients)
 }
 
 func main() {
@@ -77,7 +92,11 @@ func run(logger *slog.Logger) error {
 	metrics := observability.NewMetrics()
 
 	httpClient := &http.Client{Timeout: 5 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	agenda, err := saas.NewClient(cfg.saasBaseURL, httpClient, identity.NewStaticTokenSource(cfg.devTokens), metrics.ObserveSaaS)
+	tokens, err := tokenSource(cfg)
+	if err != nil {
+		return err
+	}
+	agenda, err := saas.NewClient(cfg.saasBaseURL, httpClient, tokens, metrics.ObserveSaaS)
 	if err != nil {
 		return err
 	}

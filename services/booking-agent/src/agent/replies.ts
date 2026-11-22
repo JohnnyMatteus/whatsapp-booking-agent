@@ -30,6 +30,8 @@ export const replies = {
 
   temporarilyUnavailable: () => text('A agenda do estúdio está indisponível agora. Pode tentar de novo em alguns minutos?'),
 
+  linked: (name: string) => text(`Pronto, ${name}! Seu telefone está vinculado. ${MENU_HINT}`),
+
   noSlots: () => text('Não encontrei aulas com vaga nesse período. Quer que eu procure em outro dia?'),
 
   noBookings: () => text('Não encontrei reservas suas nos próximos dias.'),
@@ -85,4 +87,7 @@ const BUSINESS_MESSAGES: Partial<Record<DomainErrorCode, string>> = {
   slot_not_offered: 'Essa opção expirou. Vou mostrar os horários atualizados se você pedir "horários".',
   not_found: 'Não encontrei essa aula ou reserva. Ela pode ter sido removida pelo estúdio.',
   access_denied: 'Não encontrei seu cadastro no estúdio. Fale com a recepção para liberar o agendamento.',
+  contact_not_linked:
+    'Este telefone ainda não está vinculado ao seu cadastro. Entre na sua conta do estúdio, gere o código em "Meu perfil > WhatsApp" e me envie: vincular 123456 (com o seu código).',
+  invalid_link_code: 'Esse código não é válido ou já expirou. Gere um novo na sua conta do estúdio e me envie: vincular 123456 (com o seu código).',
 };

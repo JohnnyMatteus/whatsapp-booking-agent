@@ -133,6 +133,9 @@ services:
       HTTP_ADDR: ":8090"
       SAAS_BASE_URL: ${SAAS_BASE_URL:-http://saas-mock:8080/api}
       SAAS_DEV_TOKENS: ${SAAS_DEV_TOKENS:-{"estudio-lotus":"dev-only-saas-token"}}
+      # Com SAAS_TOKEN_URL definida, usa a conta de serviço do estúdio no Keycloak (ADR 0009).
+      SAAS_TOKEN_URL: ${SAAS_TOKEN_URL:-}
+      SAAS_AGENT_CLIENTS: ${SAAS_AGENT_CLIENTS:-{}}
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-only-mcp-token-change-me}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     networks: [booking-net]

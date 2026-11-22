@@ -17,6 +17,7 @@ const (
 	ToolReservar          = "reservar"
 	ToolCancelar          = "cancelar"
 	ToolEntrarListaEspera = "entrar_lista_espera"
+	ToolVincularContato   = "vincular_contato"
 )
 
 // Versão do servidor anunciada no handshake MCP.
@@ -51,11 +52,16 @@ type cancelarIn struct {
 	ReservaID string `json:"reserva_id" jsonschema:"id da reserva do aluno"`
 }
 
+type vincularIn struct {
+	member
+	Codigo string `json:"codigo" jsonschema:"código de 6 dígitos gerado pelo aluno no SaaS"`
+}
+
 type reservaOut struct {
 	Reserva scheduling.Reserva `json:"reserva"`
 }
 
-// New registra as quatro ferramentas sobre o serviço de Agendamento.
+// New registra as cinco ferramentas sobre o serviço de Agendamento.
 func New(svc *scheduling.Service, logger *slog.Logger, observe ToolObserver) *mcp.Server {
 	if observe == nil {
 		observe = func(string, string, time.Duration) {}
@@ -91,6 +97,13 @@ func New(svc *scheduling.Service, logger *slog.Logger, observe ToolObserver) *mc
 	}, instrument(ToolEntrarListaEspera, logger, observe, func(ctx context.Context, in aulaIn) (reservaOut, error) {
 		reserva, err := svc.EntrarListaEspera(ctx, in.toMember(), in.AulaID)
 		return reservaOut{Reserva: reserva}, err
+	}))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        ToolVincularContato,
+		Description: "Vincula o telefone do contato ao aluno que gerou o código de 6 dígitos no SaaS (opt-in).",
+	}, instrument(ToolVincularContato, logger, observe, func(ctx context.Context, in vincularIn) (scheduling.VinculoConfirmado, error) {
+		return svc.VincularContato(ctx, in.toMember(), in.Codigo)
 	}))
 
 	return server

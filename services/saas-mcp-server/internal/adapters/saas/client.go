@@ -1,6 +1,7 @@
 package saas
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -127,6 +128,20 @@ func (c *Client) Cancel(ctx context.Context, m scheduling.Member, bookingID stri
 }
 
 func (c *Client) do(ctx context.Context, m scheduling.Member, method, path, route string, query url.Values, out any) error {
+	return c.send(ctx, m, method, path, route, query, nil, out)
+}
+
+// ConfirmLink entrega ao SaaS o código do opt-in junto com o telefone do remetente.
+func (c *Client) ConfirmLink(ctx context.Context, m scheduling.Member, code string) (scheduling.VinculoConfirmado, error) {
+	var body linkEnvelope
+	payload := map[string]string{"code": code, "contact": m.Contact}
+	if err := c.send(ctx, m, http.MethodPost, "/v1/integrations/whatsapp/links", "integrations.whatsapp.links", nil, payload, &body); err != nil {
+		return scheduling.VinculoConfirmado{}, err
+	}
+	return scheduling.VinculoConfirmado{Nome: body.Data.MemberName}, nil
+}
+
+func (c *Client) send(ctx context.Context, m scheduling.Member, method, path, route string, query url.Values, in, out any) error {
 	token, err := c.tokens.Token(ctx, m.Studio, m.Contact)
 	if errors.Is(err, identity.ErrNoIdentity) {
 		return scheduling.NewError(scheduling.CodeAcessoNegado, "contato sem cadastro no estúdio")
@@ -139,11 +154,24 @@ func (c *Client) do(ctx context.Context, m scheduling.Member, method, path, rout
 	if query != nil {
 		u.RawQuery = query.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), nil)
+	var reqBody io.Reader
+	if in != nil {
+		encoded, err := json.Marshal(in)
+		if err != nil {
+			return fmt.Errorf("serializar requisição ao SaaS: %w", err)
+		}
+		reqBody = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), reqBody)
 	if err != nil {
 		return fmt.Errorf("montar requisição ao SaaS: %w", err)
 	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	// A conta de serviço do estúdio age como o aluno vinculado a este telefone (ADR 0009).
+	req.Header.Set("X-WhatsApp-Contact", m.Contact)
 	req.Header.Set("Accept", "application/json")
 
 	start := time.Now()

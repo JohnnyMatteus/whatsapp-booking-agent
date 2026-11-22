@@ -105,6 +105,7 @@ O CI ([`ci.yml`](.github/workflows/ci.yml)) roda um job por serviço, mais os te
 | [0006](docs/adr/0006-mensageria-rabbitmq.md) | RabbitMQ: exchange topic, filas quorum, retry com TTL e DLQ por consumidor |
 | [0007](docs/adr/0007-infraestrutura-local-e-servicos-emulados.md) | Docker com profiles, WireMock no lugar da Meta e do SaaS, MinIO para áudio |
 | [0008](docs/adr/0008-agente-langgraph-como-adapter.md) | Agente LangGraph como adapter: o LLM não chama ferramentas, saída por schema com um retry, citação garantida por código |
+| [0009](docs/adr/0009-vinculo-telefone-aluno-conta-de-servico.md) | Vínculo telefone → aluno por opt-in (`vincular 123456`) e conta de serviço por estúdio no Keycloak, sem token exchange com impersonation |
 
 Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteiros/escopo-e-recusas.md), [transferência para humano](docs/roteiros/transferencia-para-humano.md) e [modelo de domínio](docs/roteiros/modelo-dominio-agendamento.md).
 
@@ -118,7 +119,6 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 ## Próximos passos
 
-1. Vínculo telefone → aluno no SaaS e token exchange no Keycloak (hoje o servidor MCP usa token de desenvolvimento por estúdio).
 2. Caixa de entrada no painel para o atendente responder e encerrar o atendimento.
 3. Outbox no booking-agent e serialização por contato na fila.
 4. Templates aprovados para avisar promoção da lista de espera e lembrar aula.

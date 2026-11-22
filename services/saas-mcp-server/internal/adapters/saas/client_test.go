@@ -230,3 +230,41 @@ func isCode(err error, code scheduling.Code) bool {
 	var e *scheduling.Error
 	return errors.As(err, &e) && e.Code == code
 }
+
+func TestConfirmLinkEnviaCodigoETelefoneEMandaOContatoNoHeader(t *testing.T) {
+	c, seen := newClient(t, map[string]route{
+		"POST /api/v1/integrations/whatsapp/links": {status: 201, body: []byte(`{"data":{"member_name":"Aluna Exemplo","linked_at":"2026-11-21T12:00:00Z"}}`)},
+	})
+
+	got, err := c.ConfirmLink(context.Background(), member, "482913")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Nome != "Aluna Exemplo" {
+		t.Errorf("nome = %q", got.Nome)
+	}
+	if h := (*seen)[0].Header.Get("X-WhatsApp-Contact"); h != member.Contact {
+		t.Errorf("header de contato = %q", h)
+	}
+}
+
+func TestErrosDeVinculoViramCodigosDeDominio(t *testing.T) {
+	cases := map[string]scheduling.Code{
+		"invalid_link_code":           scheduling.CodeCodigoInvalido,
+		"whatsapp_contact_not_linked": scheduling.CodeNaoVinculado,
+	}
+	for typ, want := range cases {
+		status := 422
+		if want == scheduling.CodeNaoVinculado {
+			status = 403
+		}
+		c, _ := newClient(t, map[string]route{
+			"POST /api/v1/integrations/whatsapp/links": {status: status, body: problemBody(status, typ)},
+		})
+		_, err := c.ConfirmLink(context.Background(), member, "000000")
+		domain, ok := scheduling.AsError(err)
+		if !ok || domain.Code != want {
+			t.Errorf("%s: erro = %v, quer %s", typ, err, want)
+		}
+	}
+}

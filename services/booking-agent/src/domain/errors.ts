@@ -16,6 +16,8 @@ export type DomainErrorCode =
   | 'conversation_handed_off'
   | 'not_found'
   | 'access_denied'
+  | 'contact_not_linked'
+  | 'invalid_link_code'
   | 'invalid_request'
   | 'scheduling_unavailable';
 

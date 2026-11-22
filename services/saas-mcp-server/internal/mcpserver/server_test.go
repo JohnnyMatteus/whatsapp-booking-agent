@@ -81,7 +81,7 @@ func call(t *testing.T, session *mcp.ClientSession, tool string, args map[string
 	return res
 }
 
-func TestExpoeAsQuatroFerramentas(t *testing.T) {
+func TestExpoeAsCincoFerramentas(t *testing.T) {
 	res, err := connect(t).ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestExpoeAsQuatroFerramentas(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	sort.Strings(names)
-	want := "cancelar,entrar_lista_espera,listar_horarios,reservar"
+	want := "cancelar,entrar_lista_espera,listar_horarios,reservar,vincular_contato"
 	if strings.Join(names, ",") != want {
 		t.Errorf("ferramentas = %v", names)
 	}

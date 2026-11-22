@@ -51,6 +51,7 @@ const AgentState = Annotation.Root({
   turn: Annotation<Turn>,
   intent: value<Intent | null>(() => null),
   targetId: value<string | null>(() => null),
+  linkCode: value<string | null>(() => null),
   range: value<DateRange | null>(() => null),
   /** Aulas devolvidas pelas ferramentas neste turno. */
   slots: value<readonly OfferedSlot[]>(() => []),
@@ -66,6 +67,7 @@ type Update = typeof AgentState.Update;
 
 /** Limite de linhas de uma lista interativa da Cloud API. */
 const MAX_CHOICES = 10;
+const LINK_COMMAND = /^\s*vincular\s+(\d{6})\s*$/i;
 const ACTION_INTENT = { book: 'book', cancel: 'cancel', waitlist: 'join_waitlist' } as const;
 
 export function buildAgentGraph(deps: AgentDeps) {
@@ -79,6 +81,9 @@ export function buildAgentGraph(deps: AgentDeps) {
     const steps = trail(state, 'screen');
     if (turn.kind === 'unsupported') return { steps, replies: [replies.unsupported()], next: 'finalize' };
     if (turn.kind === 'action') return { steps, intent: ACTION_INTENT[turn.action], targetId: turn.targetId, next: 'act' };
+
+    const link = LINK_COMMAND.exec(turn.text);
+    if (link?.[1]) return { steps, linkCode: link[1], next: 'act' };
 
     const verdict = classifyScope(turn.text);
     switch (verdict.kind) {
@@ -129,6 +134,11 @@ export function buildAgentGraph(deps: AgentDeps) {
     };
 
     try {
+      if (state.linkCode) {
+        const { name } = await tools.linkContact(member(state), state.linkCode);
+        conversation.recordSuccess();
+        return { steps, replies: [replies.linked(name)], next: 'finalize' };
+      }
       let update: Update;
       switch (state.intent) {
         case 'greeting':

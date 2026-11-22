@@ -12,3 +12,4 @@ Formato: Contexto, Decisão, Consequências e Alternativas. Status: Aceito, salv
 | [0006](0006-mensageria-rabbitmq.md) | RabbitMQ com exchange topic, filas quorum, retry com TTL e DLQ por consumidor |
 | [0007](0007-infraestrutura-local-e-servicos-emulados.md) | Infraestrutura local com Docker, WireMock no lugar da Cloud API e do SaaS, MinIO para áudio |
 | [0008](0008-agente-langgraph-como-adapter.md) | Agente LangGraph como adapter de aplicação: LLM não chama ferramentas, saída validada por schema e citação garantida por código |
+| [0009](0009-vinculo-telefone-aluno-conta-de-servico.md) | Vínculo telefone → aluno por opt-in e conta de serviço por estúdio com delegação restrita (sem token exchange com impersonation) |
