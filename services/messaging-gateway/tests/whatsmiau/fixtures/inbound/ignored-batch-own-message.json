@@ -1,0 +1,10 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": true, "id": "3EB0A0000000000000000006" },
+    "message": { "conversation": "resposta enviada pelo próprio bot" },
+    "messageType": "conversation",
+    "messageTimestamp": 1772453000
+  }
+}

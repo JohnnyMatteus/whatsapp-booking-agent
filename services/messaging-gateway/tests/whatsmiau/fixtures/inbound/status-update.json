@@ -1,0 +1,13 @@
+{
+  "event": "messages.update",
+  "instance": "estudio-sol",
+  "date_time": "2026-03-02T12:05:00Z",
+  "data": {
+    "messageId": "3EB0B0000000000000000001",
+    "keyId": "3EB0B0000000000000000001",
+    "remoteJid": "5511900000001@s.whatsapp.net",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "instanceId": "estudio-sol"
+  }
+}

@@ -3,7 +3,7 @@
 # (HMAC-SHA256 do corpo com o App Secret). Uso: scripts/seed-webhook.sh ["texto"]
 set -euo pipefail
 
-WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:${WEBHOOK_PORT:-8080}/webhook}"
+WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:${WEBHOOK_PORT:-8080}/webhooks/cloud-api}"
 SECRET="${WHATSAPP_APP_SECRET:-dev-only-change-me-app-secret}"
 TEXT="${1:-Quais horários tem amanhã?}"
 NOW="$(date +%s)"

@@ -1,0 +1,14 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000002@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000002" },
+    "pushName": "Aluno Exemplo",
+    "message": {
+      "audioMessage": { "mimetype": "audio/ogg; codecs=opus", "seconds": 3, "ptt": true },
+      "base64": "T2dnUy1mYWtlLWF1ZGlv"
+    },
+    "messageType": "audioMessage",
+    "messageTimestamp": 1772452860
+  }
+}

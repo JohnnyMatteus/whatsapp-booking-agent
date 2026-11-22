@@ -50,8 +50,8 @@ jobs:
       - name: Testes
         run: pnpm --filter @wba/contracts --filter @wba/messaging test
 
-  whatsapp-gateway:
-    name: whatsapp-gateway (webhook e sender)
+  messaging-gateway:
+    name: messaging-gateway (provedores, webhook e sender)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -65,15 +65,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: pnpm --filter @wba/whatsapp-gateway typecheck
-      - name: Testes unitários e de contrato da ACL
-        run: pnpm --filter @wba/whatsapp-gateway test
+        run: pnpm --filter @wba/messaging-gateway typecheck
+      - name: Testes unitários e de contrato das ACLs (Cloud API e Whatsmiau)
+        run: pnpm --filter @wba/messaging-gateway test
       - name: Integração (Redis e RabbitMQ reais via testcontainers)
-        run: pnpm --filter @wba/whatsapp-gateway test:integration
+        run: pnpm --filter @wba/messaging-gateway test:integration
       - name: Build
-        run: pnpm --filter @wba/whatsapp-gateway build
+        run: pnpm --filter @wba/messaging-gateway build
       - name: Imagem Docker
-        run: docker build -f services/whatsapp-gateway/Dockerfile -t whatsapp-booking-agent/whatsapp-gateway:ci .
+        run: docker build -f services/messaging-gateway/Dockerfile -t whatsapp-booking-agent/messaging-gateway:ci .
 
   booking-agent:
     name: booking-agent (domínio, agente e adaptadores)
@@ -125,13 +125,13 @@ jobs:
       - name: Imagem Docker
         run: docker build -t whatsapp-booking-agent/saas-mcp-server:ci .
 
-  transcription-worker:
-    name: transcription-worker (Python)
+  media-processor:
+    name: media-processor (Python)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: services/transcription-worker
+        working-directory: services/media-processor
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,10 +143,10 @@ jobs:
         run: make install
       - name: Lint (ruff + mypy estrito)
         run: make lint
-      - name: Testes (transcritor falso)
+      - name: Testes (transcritor falso, miniatura com Pillow)
         run: make test
       - name: Imagem Docker
-        run: docker build -t whatsapp-booking-agent/transcription-worker:ci .
+        run: docker build -t whatsapp-booking-agent/media-processor:ci .
 
   web:
     name: web (painel Vue)
@@ -181,7 +181,7 @@ jobs:
           persist-credentials: false
       - name: docker compose config (todos os profiles e o override do portfólio)
         run: |
-          docker compose --profile core --profile observability --profile llm --profile tools config -q
+          docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
           docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
       - name: promtool valida configuração e alertas
         run: |

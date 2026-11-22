@@ -11,7 +11,7 @@ groups:
         expr: increase(wba_webhook_requests_total{result="invalid_signature"}[10m]) > 5
         labels: { severity: warn }
         annotations:
-          summary: "Requisições com X-Hub-Signature-256 inválida (App Secret trocado ou tráfego forjado)"
+          summary: "Webhooks com assinatura ou segredo inválido (segredo do provedor trocado ou tráfego forjado)"
       - alert: EnviosParaDLQ
         expr: increase(wba_queue_messages_total{result="dead_letter"}[15m]) > 0
         labels: { severity: warn }

@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 
 export default defineConfig(
   {
-    ignores: ['**/node_modules/', '**/dist/', '**/coverage/', 'services/saas-mcp-server/', 'services/transcription-worker/'],
+    ignores: ['**/node_modules/', '**/dist/', '**/coverage/', 'services/saas-mcp-server/', 'services/media-processor/'],
   },
   js.configs.recommended,
   tseslint.configs.recommended,

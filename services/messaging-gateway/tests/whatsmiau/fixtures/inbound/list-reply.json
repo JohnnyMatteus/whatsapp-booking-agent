@@ -1,0 +1,12 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000004" },
+    "message": {
+      "listResponseMessage": { "title": "Hatha 09:00", "listType": "SINGLE_SELECT", "singleSelectReply": { "selectedRowId": "v1:bk:01JNX0000000000000000HATHA" } }
+    },
+    "messageType": "listResponseMessage",
+    "messageTimestamp": 1772452950
+  }
+}

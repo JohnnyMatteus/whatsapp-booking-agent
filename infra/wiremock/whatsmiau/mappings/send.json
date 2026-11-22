@@ -1,0 +1,22 @@
+{
+  "mappings": [
+    {
+      "request": { "method": "POST", "urlPathPattern": "/v1/message/send(Text|Buttons|List)/[A-Za-z0-9_-]+", "headers": { "apikey": { "matches": ".+" } } },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": {
+          "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": true, "id": "3EB0MOCK{{randomValue length=16 type='ALPHANUMERIC' uppercase=true}}" },
+          "status": "PENDING",
+          "messageType": "conversation",
+          "instanceId": "{{request.pathSegments.[3]}}"
+        },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "request": { "method": "POST", "urlPathPattern": "/v1/message/send(Text|Buttons|List)/[A-Za-z0-9_-]+" },
+      "response": { "status": 401, "jsonBody": { "error": "apikey ausente" } }
+    }
+  ]
+}

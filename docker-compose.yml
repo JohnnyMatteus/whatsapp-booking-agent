@@ -1,5 +1,6 @@
 # Ambiente local do whatsapp-booking-agent (ADR 0007).
 #   core:          serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
+#   whatsmiau:     mock do Whatsmiau (provedor alternativo, ADR 0010); troque TENANT_CHANNELS para usá-lo
 #   observability: Prometheus, Jaeger e Grafana
 #   llm:           Ollama para o LLM local (opcional; qualquer API compatível com OpenAI serve)
 #   tools:         cliente do MinIO para inspecionar os áudios guardados
@@ -16,12 +17,18 @@ x-node-service: &node-service
 
 x-gateway-env: &gateway-env
   <<: *common-env
+  # Provedor por estúdio (ADR 0010). Sem "provider", vale a Cloud API.
+  TENANT_CHANNELS: ${TENANT_CHANNELS:-{"estudio-lotus":{"provider":"cloud-api","phoneNumberId":"100000000000001"}}}
+  # Token da API interna de mídia (media-processor -> messaging-gateway).
+  MEDIA_API_TOKEN: ${MEDIA_API_TOKEN:-dev-only-media-token}
+  WHATSMIAU_BASE_URL: ${WHATSMIAU_BASE_URL:-http://whatsmiau-mock:8080}
+  WHATSMIAU_API_KEY: ${WHATSMIAU_API_KEY:-dev-only-whatsmiau-apikey}
+  WHATSMIAU_WEBHOOK_SECRET: ${WHATSMIAU_WEBHOOK_SECRET:-dev-only-whatsmiau-webhook-secret}
   WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-dev-only-change-me-app-secret}
   WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-dev-only-verify-token}
   WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-dev-only-access-token}
   WHATSAPP_API_BASE_URL: ${WHATSAPP_API_BASE_URL:-http://cloud-api-mock:8080}
   WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v23.0}
-  TENANT_PHONE_NUMBERS: ${TENANT_PHONE_NUMBERS:-{"100000000000001":"estudio-lotus"}}
 
 services:
   rabbitmq:
@@ -73,7 +80,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Cria o bucket dos áudios (idempotente) e termina.
+  # Cria o bucket das mídias (idempotente) e termina.
   minio-init:
     image: minio/mc:RELEASE.2025-04-03T17-07-56Z
     profiles: [core]
@@ -81,7 +88,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-wba-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
-      AUDIO_BUCKET: ${AUDIO_BUCKET:-wba-audio}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
     volumes:
       - ./infra/minio/create-bucket.sh:/init/create-bucket.sh:ro
     networks: [booking-net]
@@ -100,6 +107,24 @@ services:
     volumes:
       - ./infra/wiremock/cloud-api/mappings:/home/wiremock/mappings:ro
       - ./infra/wiremock/cloud-api/__files:/home/wiremock/__files:ro
+    networks: [booking-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # Mock do Whatsmiau (envio de texto, botões e lista). O servidor real é conectado a um número
+  # por QR code e não roda em CI; ver ADR 0010.
+  whatsmiau-mock:
+    image: wiremock/wiremock:3.13.2
+    profiles: [whatsmiau]
+    command: ["--port", "8080", "--global-response-templating", "--disable-banner"]
+    ports:
+      - "127.0.0.1:${WHATSMIAU_MOCK_PORT:-9092}:8080"
+    volumes:
+      - ./infra/wiremock/whatsmiau/mappings:/home/wiremock/mappings:ro
     networks: [booking-net]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/__admin/health || exit 1"]
@@ -148,10 +173,10 @@ services:
       timeout: 3s
       retries: 5
 
-  whatsapp-webhook:
+  messaging-webhook:
     <<: *node-service
-    build: { context: ., dockerfile: services/whatsapp-gateway/Dockerfile }
-    image: whatsapp-booking-agent/whatsapp-gateway:dev
+    build: { context: ., dockerfile: services/messaging-gateway/Dockerfile }
+    image: whatsapp-booking-agent/messaging-gateway:dev
     profiles: [core]
     command: ["node", "--enable-source-maps", "dist/main-webhook.js"]
     environment:
@@ -170,11 +195,11 @@ services:
       timeout: 3s
       retries: 5
 
-  whatsapp-sender:
+  messaging-sender:
     <<: *node-service
-    # Mesma imagem do webhook, outro processo (ADR 0001); o build em cache sai instantâneo.
-    build: { context: ., dockerfile: services/whatsapp-gateway/Dockerfile }
-    image: whatsapp-booking-agent/whatsapp-gateway:dev
+    # Mesma imagem do webhook, outro processo (ADR 0001 e 0010); o build em cache sai instantâneo.
+    build: { context: ., dockerfile: services/messaging-gateway/Dockerfile }
+    image: whatsapp-booking-agent/messaging-gateway:dev
     profiles: [core]
     command: ["node", "--enable-source-maps", "dist/main-sender.js"]
     environment:
@@ -182,6 +207,8 @@ services:
       PORT: "8082"
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       cloud-api-mock:
         condition: service_healthy
@@ -224,17 +251,18 @@ services:
       timeout: 3s
       retries: 5
 
-  transcription-worker:
-    build: ./services/transcription-worker
-    image: whatsapp-booking-agent/transcription-worker:dev
+  # Valida, guarda no MinIO, gera miniatura e transcreve; baixa a mídia pela API interna do
+  # messaging-gateway e nunca fala com um provedor de WhatsApp (ADR 0011).
+  media-processor:
+    build: ./services/media-processor
+    image: whatsapp-booking-agent/media-processor:dev
     profiles: [core]
     restart: unless-stopped
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-wba}:${RABBITMQ_PASSWORD:-dev-only-change-me}@rabbitmq:5672
-      WHATSAPP_API_BASE_URL: ${WHATSAPP_API_BASE_URL:-http://cloud-api-mock:8080}
-      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v23.0}
-      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-dev-only-access-token}
-      AUDIO_BUCKET: ${AUDIO_BUCKET:-wba-audio}
+      GATEWAY_URL: http://messaging-webhook:8080
+      MEDIA_API_TOKEN: ${MEDIA_API_TOKEN:-dev-only-media-token}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
       S3_ENDPOINT_URL: http://minio:9000
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-wba-admin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
@@ -242,6 +270,8 @@ services:
     networks: [booking-net]
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      messaging-webhook:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
@@ -329,11 +359,11 @@ services:
   mc:
     image: minio/mc:RELEASE.2025-04-03T17-07-56Z
     profiles: [tools]
-    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc ls --recursive local/$$AUDIO_BUCKET"]
+    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc ls --recursive local/$$MEDIA_BUCKET"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-wba-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
-      AUDIO_BUCKET: ${AUDIO_BUCKET:-wba-audio}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
     networks: [booking-net]
     depends_on:
       minio:

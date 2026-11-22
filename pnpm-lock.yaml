@@ -333,7 +333,7 @@ importers:
         specifier: ^5.1.1
         version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(jsdom@27.4.0)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.1))
 
-  services/whatsapp-gateway:
+  services/messaging-gateway:
     dependencies:
       '@wba/contracts':
         specifier: workspace:*

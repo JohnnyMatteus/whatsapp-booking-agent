@@ -1,0 +1,10 @@
+{
+  "event": "messages.upsert",
+  "instance": "estudio-sol",
+  "data": {
+    "key": { "remoteJid": "5511900000001@s.whatsapp.net", "fromMe": false, "id": "3EB0A0000000000000000009" },
+    "message": { "stickerMessage": { "mimetype": "image/webp" } },
+    "messageType": "stickerMessage",
+    "messageTimestamp": 1772453030
+  }
+}
