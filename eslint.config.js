@@ -34,6 +34,9 @@ export default defineConfig(
   {
     files: ['web/**/*.vue'],
     extends: [vue.configs['flat/recommended']],
-    languageOptions: { parserOptions: { parser: tseslint.parser, extraFileExtensions: ['.vue'] } },
+    languageOptions: {
+      globals: { HTMLElement: 'readonly', setInterval: 'readonly', clearInterval: 'readonly' },
+      parserOptions: { parser: tseslint.parser, extraFileExtensions: ['.vue'] },
+    },
   },
 );

@@ -1,9 +1,10 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import type { App } from 'vue';
-import { createVuetify } from 'vuetify';
-import { aliases, mdi } from 'vuetify/iconsets/mdi-svg';
+import type { Router } from 'vue-router';
+import { createRecadoVuetify } from './theme';
 
-export function installPlugins(app: App, queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1 } } })): void {
-  app.use(createVuetify({ icons: { defaultSet: 'mdi', aliases, sets: { mdi } } }));
+export function installPlugins(app: App, router: Router, queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } })): void {
+  app.use(createRecadoVuetify());
   app.use(VueQueryPlugin, { queryClient });
+  app.use(router);
 }
