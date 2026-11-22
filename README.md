@@ -48,7 +48,7 @@ flowchart LR
 | [`services/booking-agent`](services/booking-agent) | TypeScript, LangGraph.js | domínio, casos de uso, agente, API do painel | funcional, domínio completo e grafo testados com LLM falso |
 | [`services/saas-mcp-server`](services/saas-mcp-server) | Go, `modelcontextprotocol/go-sdk` | `listar_horarios`, `reservar`, `cancelar`, `entrar_lista_espera` e ACL do SaaS | funcional, com testes de contrato |
 | [`services/transcription-worker`](services/transcription-worker) | Python, faster-whisper | áudio → texto local, atrás de porta | esqueleto com caso de uso testado |
-| [`web`](web) | Vue 3, Vuetify, TanStack Query | painel do estúdio | esqueleto com a fila de atendimento |
+| [`web`](web) | Vue 3, Vuetify, TanStack Query | painel do estúdio | fila, conversa com costura e carimbo de fonte, métricas e escopo (tema Recado) |
 | [`packages/*`](packages) | TypeScript | contratos da fila, adaptador RabbitMQ, observabilidade | funcional |
 
 **Anti-Corruption Layer em dois pontos** ([ADR 0002](docs/adr/0002-anti-corruption-layer.md)): o payload da Cloud API vira comandos do domínio (`MensagemRecebida`, `PedidoDeReserva`, `PedidoDeCancelamento`) e as respostas viram texto, botões ou lista da Meta; o modelo do SaaS (tenant, sessão, reserva, `problem+json`) vira Aula, Reserva e erros de domínio com mapeamento explícito. Nenhum tipo da Meta ou do SaaS entra no domínio.
@@ -70,7 +70,7 @@ make seed TEXT="me conta uma piada"
 | --- | --- |
 | http://127.0.0.1:8080/webhook | webhook (GET de verificação e POST assinado) |
 | http://127.0.0.1:9090/__admin/requests | respostas que o bot "enviou" ao mock da Cloud API |
-| http://127.0.0.1:5173 | painel do estúdio (fila de atendimento) |
+| http://127.0.0.1:5173 | painel do estúdio (Recado) |
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
@@ -119,7 +119,6 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 ## Próximos passos
 
-2. Caixa de entrada no painel para o atendente responder e encerrar o atendimento.
 3. Outbox no booking-agent e serialização por contato na fila.
 4. Templates aprovados para avisar promoção da lista de espera e lembrar aula.
 5. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).

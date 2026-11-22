@@ -1,0 +1,42 @@
+:root {
+  --font-body: 'Onest Variable', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
+}
+
+html, body, .v-application { font-family: var(--font-body); font-size: 15px; line-height: 22px; }
+h1, h2, h3, .display { font-family: var(--font-display); font-variation-settings: 'opsz' 48; }
+.tnum { font-variant-numeric: tabular-nums; }
+.meta { font-size: 12px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); }
+
+/* Três painéis com calhas de 1 px, sem cards flutuando. */
+.panels { display: grid; grid-template-columns: 320px minmax(0, 1fr) 300px; height: calc(100vh - 56px); }
+.panels > section { min-width: 0; min-height: 0; overflow: auto; background: rgb(var(--v-theme-surface)); }
+.panels > section + section { border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.panels > .conversation { display: flex; flex-direction: column; background: rgb(var(--v-theme-background)); }
+
+@media (max-width: 1199px) { .panels { grid-template-columns: 300px minmax(0, 1fr); } .panels > .context { display: none; } }
+@media (max-width: 799px) {
+  .panels { grid-template-columns: minmax(0, 1fr); }
+  .panels[data-selected='true'] > .queue { display: none; }
+  .panels[data-selected='false'] > .conversation { display: none; }
+}
+
+/* Costura de transferência: pesponto em amarelo-recado, de borda a borda, com o motivo no meio. */
+.seam { position: relative; margin: 20px 0; display: flex; justify-content: center; }
+.seam::before {
+  content: ''; position: absolute; inset: 50% 0 auto 0; height: 2px; transform: translateY(-50%);
+  background: repeating-linear-gradient(90deg, rgb(var(--v-theme-accent)) 0 6px, transparent 6px 10px);
+}
+.seam .v-chip { position: relative; background: rgb(var(--v-theme-accent)) !important; color: rgb(var(--v-theme-on-accent)) !important; opacity: 1; }
+.seam--resumed::before { background: repeating-linear-gradient(90deg, rgb(var(--v-theme-secondary)) 0 6px, transparent 6px 10px); }
+.seam--resumed .v-chip { background: rgb(var(--v-theme-surface-variant)) !important; color: rgb(var(--v-theme-on-surface)) !important; }
+
+/* Selo de recado: pulsa uma vez quando a conversa entra na fila. */
+@keyframes slide-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pulse-once { 0% { box-shadow: 0 0 0 0 rgba(245, 194, 76, 0.8); } 100% { box-shadow: 0 0 0 10px rgba(245, 194, 76, 0); } }
+.queue-item--new { animation: slide-in 240ms ease-out; }
+.queue-item--new .badge-recado { animation: pulse-once 900ms ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .queue-item--new, .queue-item--new .badge-recado { animation: none; } }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 2px; }

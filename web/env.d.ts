@@ -8,4 +8,5 @@ declare module '*.vue' {
 
 interface ImportMetaEnv {
   readonly VITE_TENANT_ID?: string;
+  readonly VITE_STUDIO_TIMEZONE?: string;
 }
