@@ -99,6 +99,28 @@ export interface HandoffTicket {
   readonly requestedAt: string;
 }
 
+/** O que o media-processor concluiu sobre uma mídia do aluno (evento `media.processed`). */
+export interface MediaNote {
+  readonly kind: 'audio' | 'image';
+  readonly status: 'processed' | 'rejected';
+  readonly rejectionReason: string | null;
+  readonly transcribed: boolean;
+  /** Chave no armazenamento; fica no servidor, o painel só recebe se existe miniatura. */
+  readonly thumbnailKey: string | null;
+}
+
+/** Anotações de mídia por mensagem, independentes da ordem em que o evento e o texto chegam. */
+export interface MediaNotes {
+  save(tenantId: string, messageId: string, note: MediaNote): Promise<void>;
+  find(tenantId: string, messageId: string): Promise<MediaNote | null>;
+}
+
+/** Miniaturas guardadas pelo media-processor (baixadas pela API interna dele). */
+export interface ThumbnailSource {
+  /** null se a miniatura não existe mais (expirou no bucket). */
+  fetch(key: string): Promise<Uint8Array | null>;
+}
+
 /** Fila de atendimento humano (modelo de leitura do painel). */
 export interface HandoffQueue {
   enqueue(ticket: HandoffTicket): Promise<void>;
@@ -133,6 +155,14 @@ export interface SlotCitation {
   readonly tool: 'listar_horarios';
 }
 
+/** Visão da mídia para o painel: sem a chave do armazenamento. */
+export interface MediaView {
+  readonly kind: 'audio' | 'image';
+  readonly status: 'processed' | 'rejected';
+  readonly rejectionReason: string | null;
+  readonly hasThumbnail: boolean;
+}
+
 export type TemplateName = 'lembrete_aula' | 'vaga_liberada';
 
 interface EntryBase {
@@ -147,6 +177,8 @@ export type TimelineEntry =
       readonly transcribed: boolean;
       readonly messageId: string;
       readonly action: { readonly action: 'book' | 'cancel' | 'waitlist'; readonly targetId: string } | null;
+      /** Preenchido só na leitura do painel, a partir do evento `media.processed`. */
+      readonly media?: MediaView | null;
     })
   | (EntryBase & {
       readonly kind: 'bot';

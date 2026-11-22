@@ -53,6 +53,7 @@ function fakeApi(overrides: Partial<PanelApi> = {}): PanelApi {
     conversation: vi.fn().mockResolvedValue(detail),
     send: vi.fn().mockResolvedValue({ id: '5', kind: 'attendant', at: at(0), text: 'oi' }),
     resume: vi.fn().mockResolvedValue(undefined),
+    thumbnail: vi.fn().mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8])], { type: 'image/jpeg' })),
     metrics: vi.fn().mockRejectedValue(new Error('sem métricas')),
     scope: vi.fn(),
     ...overrides,
@@ -95,6 +96,44 @@ describe('fila', () => {
   it('erro da API aparece na fila', async () => {
     const wrapper = await render(fakeApi({ conversations: vi.fn().mockRejectedValue(new Error('500')) }));
     expect(wrapper.find('[data-test="list-error"]').exists()).toBe(true);
+  });
+});
+
+describe('mídia do aluno', () => {
+  const withMedia = (media: object): ConversationDetail => ({
+    ...detail,
+    timeline: [{ id: 'm', kind: 'student', at: at(3), text: 'Mensagem de um tipo que o bot não lê', transcribed: false, messageId: 'wamid.IMG', action: null, media } as never],
+  });
+
+  it('mostra a miniatura buscada pela API autenticada', async () => {
+    globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:miniatura');
+    globalThis.URL.revokeObjectURL = vi.fn();
+    const api = fakeApi({ conversation: vi.fn().mockResolvedValue(withMedia({ kind: 'image', status: 'processed', rejectionReason: null, hasThumbnail: true })) });
+
+    const wrapper = await render(api, ID);
+
+    expect(api.thumbnail).toHaveBeenCalledWith('wamid.IMG');
+    expect(wrapper.get('[data-test="media-thumbnail"]').attributes('src')).toBe('blob:miniatura');
+  });
+
+  it('mostra o motivo da recusa em português e não busca miniatura', async () => {
+    const api = fakeApi({ conversation: vi.fn().mockResolvedValue(withMedia({ kind: 'image', status: 'rejected', rejectionReason: 'too_large', hasThumbnail: false })) });
+
+    const wrapper = await render(api, ID);
+
+    expect(wrapper.get('[data-test="media-rejected"]').text()).toContain('arquivo grande demais');
+    expect(api.thumbnail).not.toHaveBeenCalled();
+  });
+
+  it('miniatura expirada vira aviso, não erro de tela', async () => {
+    const api = fakeApi({
+      conversation: vi.fn().mockResolvedValue(withMedia({ kind: 'image', status: 'processed', rejectionReason: null, hasThumbnail: true })),
+      thumbnail: vi.fn().mockRejectedValue(new ApiError(404, null)),
+    });
+
+    const wrapper = await render(api, ID);
+
+    expect(wrapper.find('[data-test="media-thumbnail-missing"]').exists()).toBe(true);
   });
 });
 

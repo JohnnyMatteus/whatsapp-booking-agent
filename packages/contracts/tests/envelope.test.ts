@@ -49,6 +49,8 @@ describe('mídia', () => {
     expect(parseEnvelope(JSON.parse(JSON.stringify(received))).type).toBe(MessageType.MediaReceived);
     expect(parseEnvelope(JSON.parse(JSON.stringify(processed))).payload).toMatchObject({ transcribed: false, status: 'processed' });
     expect(Queues.media.bindings).toEqual([MessageType.MediaReceived]);
+    // O agente guarda o desfecho da mídia para o painel mostrar a miniatura.
+    expect(Queues.bookingAgent.bindings).toContain(MessageType.MediaProcessed);
   });
 
   it('rejeita tipo de mídia fora de áudio e imagem', () => {

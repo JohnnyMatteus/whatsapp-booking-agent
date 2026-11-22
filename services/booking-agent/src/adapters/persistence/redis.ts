@@ -7,6 +7,8 @@ import {
   type ConversationSummary,
   type HandoffQueue,
   type HandoffTicket,
+  type MediaNote,
+  type MediaNotes,
   type MetricIncrement,
   type MetricsStore,
   type NoticeLedger,
@@ -143,5 +145,23 @@ export class RedisNoticeLedger implements NoticeLedger {
 
   async claim(key: string): Promise<boolean> {
     return (await this.redis.set(this.prefix + key, '1', 'EX', CONVERSATION_TTL_SECONDS, 'NX')) === 'OK';
+  }
+}
+
+/** Anotações de mídia por estúdio (um hash por estúdio); somem com o áudio, em 30 dias. */
+export class RedisMediaNotes implements MediaNotes {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wba:media-notes:',
+  ) {}
+
+  async save(tenantId: string, messageId: string, note: MediaNote): Promise<void> {
+    const key = `${this.prefix}${tenantId}`;
+    await this.redis.multi().hset(key, messageId, JSON.stringify(note)).expire(key, CONVERSATION_TTL_SECONDS).exec();
+  }
+
+  async find(tenantId: string, messageId: string): Promise<MediaNote | null> {
+    const raw = await this.redis.hget(`${this.prefix}${tenantId}`, messageId);
+    return raw ? (JSON.parse(raw) as MediaNote) : null;
   }
 }

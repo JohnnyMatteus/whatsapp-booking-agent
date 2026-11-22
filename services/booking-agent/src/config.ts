@@ -16,6 +16,8 @@ const Env = z.object({
   OIDC_AUDIENCE: z.string().min(1),
   OIDC_JWKS_URL: z.string().url(),
   INTERNAL_API_TOKEN: z.string().min(16),
+  MEDIA_PROCESSOR_URL: z.string().url(),
+  MEDIA_API_TOKEN: z.string().min(16),
   REMINDER_TENANTS: z.string().default('estudio-lotus'),
   REMINDER_INTERVAL_MS: z.coerce.number().int().min(1000).default(300_000),
   CONSUMER_PREFETCH: z.coerce.number().int().min(1).default(5),

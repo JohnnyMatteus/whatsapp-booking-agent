@@ -289,6 +289,9 @@ services:
       STUDIO_TIMEZONE: ${STUDIO_TIMEZONE:-America/Sao_Paulo}
       OIDC_ISSUER: *oidc-issuer
       OIDC_AUDIENCE: wba-api
+      # Miniaturas das imagens dos alunos, pela API interna do media-processor.
+      MEDIA_PROCESSOR_URL: http://media-processor:8083
+      MEDIA_API_TOKEN: ${MEDIA_API_TOKEN:-dev-only-media-token}
       OIDC_JWKS_URL: http://keycloak:8080/realms/wba/protocol/openid-connect/certs
       # Rota /internal (avisos por template), chamada pelo SaaS; o proxy do painel não a expõe.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-only-internal-token}

@@ -11,11 +11,13 @@ import json
 import logging
 import os
 import signal
+import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from .consumer import ConsumerOptions, Delivery, handle_delivery
+from .http_api import handle_request
 from .service import ProcessMedia
 from .topology import BINDINGS, EXCHANGE, QUEUE, queue_arguments
 
@@ -40,6 +42,28 @@ def build_service(publisher: Any) -> ProcessMedia:
         thumbnails=PillowThumbnailGenerator(),
         publisher=publisher,
     )
+
+
+def serve_internal_api(port: int, store: Any, token: str, render_metrics: Callable[[], tuple[str, bytes]]) -> None:
+    """Miniaturas e métricas em outra thread: o laço de consumo não espera por requisições HTTP."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            response = handle_request(
+                self.path, {k.lower(): v for k, v in self.headers.items()}, store, token, render_metrics
+            )
+            self.send_response(response.status)
+            self.send_header("Content-Type", response.content_type)
+            self.send_header("Content-Length", str(len(response.body)))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(response.body)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            """Sem log de acesso: a query leva a chave do armazenamento."""
+
+    threading.Thread(target=ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever, daemon=True).start()
 
 
 class AioPikaPublisher:
@@ -103,13 +127,13 @@ class _Forwarder:
 
 async def consume() -> None:
     import aio_pika
-    from prometheus_client import REGISTRY, start_http_server
+    from prometheus_client import REGISTRY
+    from prometheus_client.exposition import CONTENT_TYPE_LATEST, generate_latest
 
     from .metrics import PrometheusObserver
 
     max_attempts = int(os.environ.get("CONSUMER_MAX_ATTEMPTS", "4"))
     retry_delay_ms = int(os.environ.get("CONSUMER_RETRY_DELAY_MS", "3000"))
-    start_http_server(int(os.environ.get("PORT", "8083")), registry=REGISTRY)
     observer = PrometheusObserver(REGISTRY)
 
     connection = await aio_pika.connect_robust(os.environ["RABBITMQ_URL"])
@@ -123,6 +147,12 @@ async def consume() -> None:
         await queues[QUEUE].bind(exchange, routing_key=routing_key)
 
     service = build_service(AioPikaPublisher(channel, asyncio.get_running_loop()))
+    serve_internal_api(
+        int(os.environ.get("PORT", "8083")),
+        service.store,
+        os.environ["MEDIA_API_TOKEN"],
+        lambda: (CONTENT_TYPE_LATEST, generate_latest(REGISTRY)),
+    )
     options = ConsumerOptions(queue=QUEUE, max_attempts=max_attempts)
     forwarder = _Forwarder(channel)
 

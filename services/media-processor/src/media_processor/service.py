@@ -24,7 +24,7 @@ class ProcessMedia:
         publisher: Publisher,
     ) -> None:
         self._media = media
-        self._store = store
+        self.store = store
         self._transcriber = transcriber
         self._thumbnails = thumbnails
         self._publisher = publisher
@@ -47,8 +47,8 @@ class ProcessMedia:
             # Gera antes de guardar: imagem que não decodifica não deve ficar no armazenamento.
             thumbnail = self._thumbnails.generate(data)
             thumbnail_key = f"{key}.thumb.jpg"
-            self._store.put(thumbnail_key, thumbnail, THUMBNAIL_CONTENT_TYPE)
-        self._store.put(key, data, media.mime_type)
+            self.store.put(thumbnail_key, thumbnail, THUMBNAIL_CONTENT_TYPE)
+        self.store.put(key, data, media.mime_type)
 
         if media.kind is MediaKind.IMAGE:
             self._publisher.publish(

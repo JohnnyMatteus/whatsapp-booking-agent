@@ -150,7 +150,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 3. Outbox no booking-agent e serialização por contato na fila.
 4. Templates aprovados para avisar promoção da lista de espera e lembrar aula.
 5. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
-6. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ hoje só é testado sem broker); painel exibindo miniaturas a partir de `media.processed`.
+6. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
 7. Testes de mutação no domínio e de carga no webhook no CI.
 8. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); mapeamento de JIDs `@lid`.
 9. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes) e rotação da chave pública no Kong; deploy com Helm atrás do `platform-edge`.

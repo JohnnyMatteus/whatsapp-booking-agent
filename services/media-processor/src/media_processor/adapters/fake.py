@@ -26,6 +26,9 @@ class InMemoryMediaStore:
         self.objects[key] = data
         self.content_types[key] = content_type
 
+    def get(self, key: str) -> bytes | None:
+        return self.objects.get(key)
+
 
 class StaticMediaSource:
     def __init__(self, data: bytes = b"OggS-fake-audio") -> None:

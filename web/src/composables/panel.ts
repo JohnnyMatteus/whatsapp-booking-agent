@@ -44,6 +44,11 @@ export function useAttendantActions(conversationId: MaybeRefOrGetter<string | un
   return { send, resume };
 }
 
+export function useThumbnail(messageId: MaybeRefOrGetter<string>) {
+  const { api, tenantId } = usePanelApi();
+  return useQuery({ queryKey: ['thumbnail', tenantId, () => toValue(messageId)], queryFn: () => api.thumbnail(toValue(messageId)), staleTime: Infinity, retry: false });
+}
+
 export function useMetrics(days: MaybeRefOrGetter<number>) {
   const { api, tenantId } = usePanelApi();
   return useQuery({ queryKey: ['metrics', tenantId, () => toValue(days)], queryFn: () => api.metrics(toValue(days)), refetchInterval: 60_000 });

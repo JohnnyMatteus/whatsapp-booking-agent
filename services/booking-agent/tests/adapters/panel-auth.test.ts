@@ -13,6 +13,7 @@ const ROUTES = [
   { name: 'resposta do atendente', method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/messages`, role: 'attendant', payload: { text: 'oi' } },
   { name: 'devolução ao bot', method: 'POST', url: `/api/tenants/${TENANT}/conversations/${CONVERSATION}/resume`, role: 'attendant' },
   { name: 'métricas', method: 'GET', url: `/api/tenants/${TENANT}/metrics?days=1`, role: 'manager' },
+  { name: 'miniatura de mídia', method: 'GET', url: `/api/tenants/${TENANT}/media/wamid.1/thumbnail`, role: 'attendant' },
   { name: 'escopo', method: 'GET', url: `/api/tenants/${TENANT}/scope`, role: 'attendant' },
 ] as const;
 

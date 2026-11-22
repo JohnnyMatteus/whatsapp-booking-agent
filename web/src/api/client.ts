@@ -20,6 +20,8 @@ export interface PanelApi {
   conversation(conversationId: string): Promise<ConversationDetail>;
   send(conversationId: string, text: string): Promise<TimelineEntry>;
   resume(conversationId: string): Promise<void>;
+  /** Miniatura da imagem de uma mensagem (o navegador não manda Authorization em <img>, então vem como blob). */
+  thumbnail(messageId: string): Promise<Blob>;
   metrics(days: number): Promise<Metrics>;
   scope(): Promise<Scope>;
 }
@@ -49,6 +51,14 @@ export function createPanelApi(tenantId: string, fetcher: Fetcher = ofetch): Pan
     async resume(id) {
       try {
         await fetcher(`${conversationUrl(id)}/resume`, { method: 'POST' });
+      } catch (error) {
+        if (error instanceof FetchError) throw new ApiError(error.statusCode ?? 0, null);
+        throw error;
+      }
+    },
+    thumbnail: async (messageId) => {
+      try {
+        return await fetcher<Blob, 'blob'>(`${base}/media/${encodeURIComponent(messageId)}/thumbnail`, { responseType: 'blob' });
       } catch (error) {
         if (error instanceof FetchError) throw new ApiError(error.statusCode ?? 0, null);
         throw error;

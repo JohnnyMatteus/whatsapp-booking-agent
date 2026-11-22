@@ -2,7 +2,7 @@
 import { localDate } from '../agent/format.js';
 import { DomainError } from '../domain/errors.js';
 import type { HandoffReason } from '../domain/events.js';
-import type { Clock, ConversationLog, ConversationRepository, ConversationSummary, MetricsStore, SlotCitation, TimelineEntry } from './ports.js';
+import type { Clock, ConversationLog, ConversationRepository, ConversationSummary, MediaNotes, MetricsStore, SlotCitation, ThumbnailSource, TimelineEntry } from './ports.js';
 import { citationsOf } from './timeline.js';
 
 export const GOALS = { botResolutionRate: 0.7, avgWaitSeconds: 300 } as const;
@@ -51,7 +51,15 @@ export interface MetricsReport {
 
 export class PanelQueries {
   constructor(
-    private readonly deps: { conversations: ConversationRepository; log: ConversationLog; metrics: MetricsStore; clock: Clock; timezone: string },
+    private readonly deps: {
+      conversations: ConversationRepository;
+      log: ConversationLog;
+      metrics: MetricsStore;
+      mediaNotes: MediaNotes;
+      thumbnails: ThumbnailSource;
+      clock: Clock;
+      timezone: string;
+    },
   ) {}
 
   async listConversations(tenantId: string, status: StatusFilter): Promise<{ data: ConversationSummary[]; meta: { waiting: number; botActive: number } }> {
@@ -65,7 +73,7 @@ export class PanelQueries {
   async conversation(tenantId: string, contactId: string): Promise<ConversationDetail> {
     const conversation = await this.deps.conversations.load(tenantId, contactId);
     if (!conversation) throw new DomainError('not_found', 'Conversa não encontrada.');
-    const timeline = await this.deps.log.timeline(tenantId, conversation.id);
+    const timeline = await this.withMedia(tenantId, await this.deps.log.timeline(tenantId, conversation.id));
     const snapshot = conversation.snapshot();
     const offeredAt = snapshot.offeredAt;
     const fetchedAt = offeredAt ?? '';
@@ -89,6 +97,27 @@ export class PanelQueries {
         linked: conversation.linked,
       },
     };
+  }
+
+  /** Miniatura da imagem de uma mensagem do estúdio. A chave vem da anotação guardada no servidor, nunca do cliente. */
+  async thumbnail(tenantId: string, messageId: string): Promise<Uint8Array> {
+    const note = await this.deps.mediaNotes.find(tenantId, messageId);
+    // Defesa em profundidade: a chave do armazenamento começa pelo estúdio do evento.
+    if (!note?.thumbnailKey || !note.thumbnailKey.startsWith(`media/${tenantId}/`)) throw new DomainError('not_found', 'Miniatura não encontrada.');
+    const bytes = await this.deps.thumbnails.fetch(note.thumbnailKey);
+    if (!bytes) throw new DomainError('not_found', 'Miniatura não encontrada.');
+    return bytes;
+  }
+
+  private async withMedia(tenantId: string, timeline: readonly TimelineEntry[]): Promise<readonly TimelineEntry[]> {
+    return Promise.all(
+      timeline.map(async (entry) => {
+        if (entry.kind !== 'student') return entry;
+        const note = await this.deps.mediaNotes.find(tenantId, entry.messageId);
+        const media = note ? { kind: note.kind, status: note.status, rejectionReason: note.rejectionReason, hasThumbnail: note.thumbnailKey !== null } : null;
+        return { ...entry, media };
+      }),
+    );
   }
 
   async metrics(tenantId: string, days: number): Promise<MetricsReport> {

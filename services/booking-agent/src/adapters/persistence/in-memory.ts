@@ -6,6 +6,8 @@ import {
   type ConversationSummary,
   type HandoffQueue,
   type HandoffTicket,
+  type MediaNote,
+  type MediaNotes,
   type MetricIncrement,
   type MetricsStore,
   type NoticeLedger,
@@ -94,5 +96,17 @@ export class InMemoryNoticeLedger implements NoticeLedger {
     if (this.claimed.has(key)) return false;
     this.claimed.add(key);
     return true;
+  }
+}
+
+export class InMemoryMediaNotes implements MediaNotes {
+  private readonly notes = new Map<string, MediaNote>();
+
+  async save(tenantId: string, messageId: string, note: MediaNote): Promise<void> {
+    this.notes.set(`${tenantId}\u0000${messageId}`, note);
+  }
+
+  async find(tenantId: string, messageId: string): Promise<MediaNote | null> {
+    return this.notes.get(`${tenantId}\u0000${messageId}`) ?? null;
   }
 }

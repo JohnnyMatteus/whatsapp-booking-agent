@@ -6,11 +6,12 @@ import { Redis } from 'ioredis';
 import { createJwtVerifier, remoteKeys } from './adapters/http/auth.js';
 import { buildPanelApi } from './adapters/http/server.js';
 import { OpenAiCompatibleClient } from './adapters/llm/openai-compatible.js';
+import { HttpThumbnailSource } from './adapters/media/http-thumbnails.js';
 import { connectMcp } from './adapters/mcp/connect.js';
 import { McpSchedulingTools } from './adapters/mcp/scheduling-tools.js';
 import { createInboundHandler } from './adapters/messaging/consumer.js';
 import { toEnvelopes } from './adapters/messaging/mapping.js';
-import { RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMetricsStore, RedisNoticeLedger } from './adapters/persistence/redis.js';
+import { RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMediaNotes, RedisMetricsStore, RedisNoticeLedger } from './adapters/persistence/redis.js';
 import { LangGraphConversationAgent } from './agent/graph.js';
 import { HandleInboundMessage } from './application/handle-inbound.js';
 import { MetricsRecorder } from './application/metrics-recorder.js';
@@ -39,6 +40,7 @@ const conversations = new RedisConversationRepository(redis);
 const handoffs = new RedisHandoffQueue(redis);
 const log = new RedisConversationLog(redis);
 const metricsStore = new RedisMetricsStore(redis);
+const mediaNotes = new RedisMediaNotes(redis);
 const recorder = new MetricsRecorder(metricsStore, config.STUDIO_TIMEZONE);
 const publisher: OutboundPublisher = {
   async publish(messages, correlationId) {
@@ -60,7 +62,7 @@ const useCase = new HandleInboundMessage({ conversations, agent, publisher, hand
 await bus.consume(
   Queues.bookingAgent,
   { prefetch: config.CONSUMER_PREFETCH, maxAttempts: config.CONSUMER_MAX_ATTEMPTS, retryDelayMs: config.CONSUMER_RETRY_DELAY_MS },
-  createInboundHandler({ useCase, metrics, recorder, logger, tracer: tracing.tracer }),
+  createInboundHandler({ useCase, metrics, recorder, mediaNotes, logger, tracer: tracing.tracer }),
 );
 // A fila de atendimento existe mesmo sem consumidor dedicado: as mensagens ficam guardadas.
 await bus.declareQueue(Queues.attendance, config.CONSUMER_RETRY_DELAY_MS);
@@ -79,7 +81,7 @@ const reminderTimer = setInterval(() => {
 const api = buildPanelApi({
   verifier: createJwtVerifier({ issuer: config.OIDC_ISSUER, audience: config.OIDC_AUDIENCE, keys: remoteKeys(config.OIDC_JWKS_URL) }),
   internalToken: config.INTERNAL_API_TOKEN,
-  queries: new PanelQueries({ conversations, log, metrics: metricsStore, clock, timezone: config.STUDIO_TIMEZONE }),
+  queries: new PanelQueries({ conversations, log, metrics: metricsStore, mediaNotes, thumbnails: new HttpThumbnailSource(config.MEDIA_PROCESSOR_URL, config.MEDIA_API_TOKEN), clock, timezone: config.STUDIO_TIMEZONE }),
   reply: new ReplyAsAttendant({ conversations, publisher, log, metrics: recorder, clock }),
   resume: new ResumeConversation({ conversations, handoffs, publisher, log, metrics: recorder, clock }),
   notify,

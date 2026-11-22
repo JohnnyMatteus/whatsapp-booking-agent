@@ -131,7 +131,7 @@ Envelope versionado (`packages/contracts`): `{ id, type, version: 1, occurredAt,
 | --- | --- | --- | --- |
 | `inbound.message_received` | messaging-gateway, media-processor | booking-agent | origem + `text` (com `transcribed`) ou `unsupported` |
 | `inbound.media_received` | messaging-gateway | media-processor | origem + `kind` (`audio`, `image`), `mediaId`, `mimeType` |
-| `media.processed` | media-processor | (painel, evolução) | origem + `kind`, `status`, `storageKey`, `thumbnailKey?`, `transcribed`, `rejectionReason?` |
+| `media.processed` | media-processor | booking-agent (anotação por mensagem: miniatura e recusa no painel) | origem + `kind`, `status`, `storageKey`, `thumbnailKey?`, `transcribed`, `rejectionReason?` |
 | `inbound.booking_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` (`list`, `button`, `form`) |
 | `inbound.cancellation_requested` | messaging-gateway | booking-agent | origem + `bookingId`, `source` |
 | `inbound.waitlist_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` |
