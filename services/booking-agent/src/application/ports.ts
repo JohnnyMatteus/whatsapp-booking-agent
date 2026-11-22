@@ -2,7 +2,7 @@
 // estas interfaces; os casos de uso não conhecem nenhum deles.
 import type { Booking } from '../domain/booking.js';
 import type { ClassSession } from '../domain/class-session.js';
-import type { Conversation } from '../domain/conversation.js';
+import type { Conversation, OfferedSlot } from '../domain/conversation.js';
 import type { HandoffReason } from '../domain/events.js';
 
 /** Quem pede: o estúdio e o contato. A identidade no SaaS é resolvida do outro lado da porta. */
@@ -42,7 +42,7 @@ export interface SchedulingTools {
 }
 
 export type Turn =
-  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'text'; readonly text: string; readonly transcribed?: boolean }
   | { readonly kind: 'action'; readonly action: 'book' | 'cancel' | 'waitlist'; readonly targetId: string }
   | { readonly kind: 'unsupported' };
 
@@ -59,13 +59,18 @@ export interface Choice {
 }
 
 /** Resposta neutra: o tradutor do sender decide o formato da Cloud API. */
-export type Reply = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'choices'; readonly body: string; readonly choices: readonly Choice[] };
+export type Reply =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'choices'; readonly body: string; readonly choices: readonly Choice[] }
+  | { readonly kind: 'template'; readonly template: 'lembrete_aula' | 'vaga_liberada'; readonly params: readonly string[] };
 
 export type TurnOutcome = 'answered' | 'refused' | 'handed_off' | 'failed';
 
 export interface AgentResult {
   readonly replies: readonly Reply[];
   readonly outcome: TurnOutcome;
+  /** Aulas que as respostas citam, todas vindas das ferramentas neste turno ou na oferta vigente. */
+  readonly citations: readonly OfferedSlot[];
 }
 
 /** O agente é um adaptador de aplicação: recebe a conversa e o turno e decide a resposta. */
@@ -102,7 +107,7 @@ export interface HandoffQueue {
 }
 
 export type OutboundMessage =
-  | { readonly kind: 'reply'; readonly member: MemberContext; readonly inReplyTo: string; readonly reply: Reply }
+  | { readonly kind: 'reply'; readonly member: MemberContext; readonly inReplyTo?: string; readonly reply: Reply }
   | { readonly kind: 'handoff'; readonly ticket: HandoffTicket };
 
 export interface OutboundPublisher {
@@ -111,4 +116,81 @@ export interface OutboundPublisher {
 
 export interface Clock {
   now(): Date;
+}
+
+/** O carimbo de fonte: o que o bot citou veio desta consulta à agenda. */
+export interface SlotCitation {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly instructorName: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly timezone: string;
+  readonly capacity: number;
+  readonly confirmedCount: number;
+  readonly waitlistCount: number;
+  readonly fetchedAt: string;
+  readonly tool: 'listar_horarios';
+}
+
+export type TemplateName = 'lembrete_aula' | 'vaga_liberada';
+
+interface EntryBase {
+  readonly id: string;
+  readonly at: string;
+}
+
+export type TimelineEntry =
+  | (EntryBase & {
+      readonly kind: 'student';
+      readonly text: string;
+      readonly transcribed: boolean;
+      readonly messageId: string;
+      readonly action: { readonly action: 'book' | 'cancel' | 'waitlist'; readonly targetId: string } | null;
+    })
+  | (EntryBase & {
+      readonly kind: 'bot';
+      readonly text: string;
+      readonly choices: readonly Choice[];
+      readonly citations: readonly SlotCitation[];
+      readonly outcome: TurnOutcome;
+    })
+  | (EntryBase & { readonly kind: 'attendant'; readonly text: string })
+  | (EntryBase & { readonly kind: 'handoff'; readonly reason: HandoffReason })
+  | (EntryBase & { readonly kind: 'resumed' })
+  | (EntryBase & { readonly kind: 'template'; readonly template: TemplateName; readonly text: string; readonly citations: readonly SlotCitation[] });
+
+export interface ConversationSummary {
+  readonly conversationId: string;
+  readonly contactId: string;
+  readonly status: 'bot_active' | 'handed_off';
+  readonly handoff: { readonly reason: HandoffReason; readonly at: string } | null;
+  readonly lastMessage: { readonly author: 'student' | 'bot' | 'attendant'; readonly preview: string; readonly at: string } | null;
+  readonly updatedAt: string;
+}
+
+/** Modelo de leitura do painel: linha do tempo e resumo por conversa. */
+export interface ConversationLog {
+  /** Acrescenta as entradas e atualiza o resumo (estado, transferência, última mensagem). */
+  record(conversation: Conversation, entries: readonly TimelineEntry[]): Promise<void>;
+  summaries(tenantId: string): Promise<readonly ConversationSummary[]>;
+  timeline(tenantId: string, conversationId: string): Promise<readonly TimelineEntry[]>;
+}
+
+export interface MetricIncrement {
+  /** Dia local do estúdio, AAAA-MM-DD. */
+  readonly day: string;
+  readonly field: string;
+  readonly by: number;
+}
+
+/** Contadores diários por estúdio (um campo por número que o painel de métricas mostra). */
+export interface MetricsStore {
+  add(tenantId: string, increments: readonly MetricIncrement[]): Promise<void>;
+  read(tenantId: string, days: readonly string[]): Promise<Readonly<Record<string, Readonly<Record<string, number>>>>>;
+}
+
+/** Garante que um aviso proativo sai uma única vez por chave (ex.: lembrete da reserva X). */
+export interface NoticeLedger {
+  claim(key: string): Promise<boolean>;
 }

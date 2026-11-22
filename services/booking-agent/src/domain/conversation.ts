@@ -53,12 +53,17 @@ export interface ConversationSnapshot {
   readonly processedMessageIds: readonly string[];
   readonly offeredSlots: readonly OfferedSlot[];
   readonly offeredAt: string | null;
-  readonly handoff: { readonly reason: HandoffReason; readonly at: string } | null;
+  readonly handoff: { readonly reason: HandoffReason; readonly at: string; readonly answeredAt?: string | null } | null;
+  /** O telefone está vinculado a um aluno no SaaS (null = ainda não se sabe). */
+  readonly linked?: boolean | null;
+  readonly lastInboundAt?: string | null;
   /** Controle de concorrência otimista no repositório. */
   readonly version: number;
 }
 
 export const MAX_CONSECUTIVE_FAILURES = 2;
+/** Depois de 24 h da última mensagem do aluno a Cloud API só aceita template. */
+export const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Uma oferta velha pode mostrar vaga que já acabou: depois disso o aluno precisa listar de novo. */
 export const OFFER_TTL_MS = 30 * 60 * 1000;
 /** Janela de deduplicação local; a deduplicação principal é no gateway (ADR 0005). */
@@ -105,6 +110,45 @@ export class Conversation {
   }
   get consecutiveFailures(): number {
     return this.state.consecutiveFailures;
+  }
+
+  get handoff(): ConversationSnapshot['handoff'] {
+    return this.state.handoff;
+  }
+  get linked(): boolean | null {
+    return this.state.linked ?? null;
+  }
+  get lastInboundAt(): string | null {
+    return this.state.lastInboundAt ?? null;
+  }
+  get serviceWindowEndsAt(): string | null {
+    const last = this.lastInboundAt;
+    return last === null ? null : new Date(Date.parse(last) + SERVICE_WINDOW_MS).toISOString();
+  }
+
+  touchInbound(now: Date): void {
+    this.state = { ...this.state, lastInboundAt: now.toISOString() };
+  }
+
+  markLinked(linked: boolean): void {
+    this.state = { ...this.state, linked };
+  }
+
+  /** O atendente só fala com conversa transferida e dentro da janela de 24 h do aluno. */
+  assertAttendantMayReply(now: Date): void {
+    if (this.state.status !== 'handed_off') throw new DomainError('conversation_with_bot', 'A conversa está com o bot; transfira antes de responder.');
+    const end = this.serviceWindowEndsAt;
+    if (end === null || now.getTime() > Date.parse(end)) {
+      throw new DomainError('customer_service_window_closed', 'Passaram 24 h da última mensagem do aluno; só é possível enviar template.');
+    }
+  }
+
+  /** Registra a resposta do atendente; devolve a espera até a primeira resposta (segundos) ou null nas seguintes. */
+  attendantReplied(now: Date): number | null {
+    const handoff = this.state.handoff;
+    if (handoff === null || (handoff.answeredAt ?? null) !== null) return null;
+    this.state = { ...this.state, handoff: { ...handoff, answeredAt: now.toISOString() } };
+    return Math.max(0, Math.round((now.getTime() - Date.parse(handoff.at)) / 1000));
   }
 
   isBotActive(): boolean {

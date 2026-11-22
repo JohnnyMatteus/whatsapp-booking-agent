@@ -1,5 +1,17 @@
 // Adaptadores em memória: testes e execução local sem Redis.
-import { ConcurrentModification, type ConversationRepository, type HandoffQueue, type HandoffTicket } from '../../application/ports.js';
+import {
+  ConcurrentModification,
+  type ConversationLog,
+  type ConversationRepository,
+  type ConversationSummary,
+  type HandoffQueue,
+  type HandoffTicket,
+  type MetricIncrement,
+  type MetricsStore,
+  type NoticeLedger,
+  type TimelineEntry,
+} from '../../application/ports.js';
+import { TIMELINE_LIMIT, summarize } from './summary.js';
 import { Conversation, type ConversationSnapshot } from '../../domain/conversation.js';
 
 export class InMemoryConversationRepository implements ConversationRepository {
@@ -31,5 +43,56 @@ export class InMemoryHandoffQueue implements HandoffQueue {
 
   async remove(tenantId: string, conversationId: string): Promise<void> {
     this.tickets.delete(`${tenantId}|${conversationId}`);
+  }
+}
+
+export class InMemoryConversationLog implements ConversationLog {
+  private readonly summariesById = new Map<string, ConversationSummary & { tenantId: string }>();
+  private readonly timelines = new Map<string, TimelineEntry[]>();
+
+  async record(conversation: Conversation, entries: readonly TimelineEntry[]): Promise<void> {
+    const key = `${conversation.tenantId}|${conversation.id}`;
+    const timeline = [...(this.timelines.get(key) ?? []), ...entries].slice(-TIMELINE_LIMIT);
+    this.timelines.set(key, timeline);
+    this.summariesById.set(key, { tenantId: conversation.tenantId, ...summarize(conversation, timeline) });
+  }
+
+  async summaries(tenantId: string): Promise<readonly ConversationSummary[]> {
+    return [...this.summariesById.values()].filter((s) => s.tenantId === tenantId);
+  }
+
+  async timeline(tenantId: string, conversationId: string): Promise<readonly TimelineEntry[]> {
+    return this.timelines.get(`${tenantId}|${conversationId}`) ?? [];
+  }
+}
+
+export class InMemoryMetricsStore implements MetricsStore {
+  private readonly counters = new Map<string, number>();
+
+  async add(tenantId: string, increments: readonly MetricIncrement[]): Promise<void> {
+    for (const { day, field, by } of increments) {
+      const key = `${tenantId}|${day}|${field}`;
+      this.counters.set(key, (this.counters.get(key) ?? 0) + by);
+    }
+  }
+
+  async read(tenantId: string, days: readonly string[]): Promise<Record<string, Record<string, number>>> {
+    const out: Record<string, Record<string, number>> = {};
+    for (const [key, value] of this.counters) {
+      const [tenant, day, ...field] = key.split('|');
+      if (tenant !== tenantId || !day || !days.includes(day)) continue;
+      (out[day] ??= {})[field.join('|')] = value;
+    }
+    return out;
+  }
+}
+
+export class InMemoryNoticeLedger implements NoticeLedger {
+  private readonly claimed = new Set<string>();
+
+  async claim(key: string): Promise<boolean> {
+    if (this.claimed.has(key)) return false;
+    this.claimed.add(key);
+    return true;
   }
 }

@@ -39,7 +39,12 @@ export function uncitedMentions(reply: Reply, allowed: readonly OfferedSlot[]): 
   // Títulos de aula vêm das ferramentas e podem ter números ("Yoga 1h"): saem da varredura.
   const titles = [...new Set(allowed.map((slot) => slot.title))].sort((a, b) => b.length - a.length);
   const withoutTitles = (value: string) => titles.reduce((acc, title) => acc.split(title).join(' '), value);
-  const texts = reply.kind === 'text' ? [reply.text] : [reply.body, ...reply.choices.flatMap((c) => [c.title, c.description ?? ''])];
+  const texts =
+    reply.kind === 'text'
+      ? [reply.text]
+      : reply.kind === 'template'
+        ? [...reply.params]
+        : [reply.body, ...reply.choices.flatMap((c) => [c.title, c.description ?? ''])];
   return texts
     .map(withoutTitles)
     .flatMap(temporalMentions)

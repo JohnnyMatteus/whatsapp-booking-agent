@@ -81,6 +81,10 @@ export const Choice = z.object({
 export type Choice = z.infer<typeof Choice>;
 
 /** Conteúdo neutro de saída. O tradutor do sender decide se vira texto, botões ou lista da Cloud API. */
+/** Templates aprovados na Meta para mensagens iniciadas pelo estúdio (fora da janela de 24 h). */
+export const TemplateName = z.enum(['lembrete_aula', 'vaga_liberada']);
+export type TemplateName = z.infer<typeof TemplateName>;
+
 export const ReplyContent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string().min(1).max(4096) }),
   z.object({
@@ -88,6 +92,7 @@ export const ReplyContent = z.discriminatedUnion('kind', [
     body: z.string().min(1).max(1024),
     choices: z.array(Choice).min(1).max(10),
   }),
+  z.object({ kind: z.literal('template'), template: TemplateName, params: z.array(z.string().min(1).max(256)).min(1).max(5) }),
 ]);
 export type ReplyContent = z.infer<typeof ReplyContent>;
 

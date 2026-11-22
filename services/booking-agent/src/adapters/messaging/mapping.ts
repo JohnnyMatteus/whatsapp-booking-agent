@@ -1,7 +1,7 @@
 // Fronteira entre a linguagem publicada (contratos da fila) e a camada de aplicação.
-import { createEnvelope, MessageType, type AnyEnvelope } from '@wba/contracts';
+import { createEnvelope, MessageType, type AnyEnvelope, type ReplyRequested } from '@wba/contracts';
 import { randomUUID } from 'node:crypto';
-import type { InboundCommand, OutboundMessage } from '../../application/ports.js';
+import type { InboundCommand, OutboundMessage, Reply } from '../../application/ports.js';
 
 /** null = mensagem que o agente não processa (ex.: status de entrega, só métrica). */
 export function toInboundCommand(envelope: AnyEnvelope): InboundCommand | null {
@@ -12,7 +12,7 @@ export function toInboundCommand(envelope: AnyEnvelope): InboundCommand | null {
         tenantId,
         contactId,
         messageId,
-        turn: content.kind === 'text' ? { kind: 'text', text: content.text } : { kind: 'unsupported' },
+        turn: content.kind === 'text' ? { kind: 'text', text: content.text, transcribed: content.transcribed } : { kind: 'unsupported' },
       };
     }
     case MessageType.BookingRequested:
@@ -39,12 +39,23 @@ export function toEnvelopes(messages: readonly OutboundMessage[], correlationId:
         {
           tenantId: message.member.tenantId,
           contactId: message.member.contactId,
-          inReplyTo: message.inReplyTo,
-          content: message.reply.kind === 'text' ? message.reply : { ...message.reply, choices: [...message.reply.choices] },
+          ...(message.inReplyTo === undefined ? {} : { inReplyTo: message.inReplyTo }),
+          content: toContent(message.reply),
         },
         meta,
       );
     }
     return createEnvelope(MessageType.HandoffRequested, { ...message.ticket }, meta);
   });
+}
+
+function toContent(reply: Reply): ReplyRequested['content'] {
+  switch (reply.kind) {
+    case 'text':
+      return reply;
+    case 'choices':
+      return { ...reply, choices: [...reply.choices] };
+    case 'template':
+      return { ...reply, params: [...reply.params] };
+  }
 }

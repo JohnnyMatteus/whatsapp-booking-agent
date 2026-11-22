@@ -1,7 +1,19 @@
 // Persistência da conversa e da fila de atendimento no Redis.
 import type { Redis } from 'ioredis';
-import { ConcurrentModification, type ConversationRepository, type HandoffQueue, type HandoffTicket } from '../../application/ports.js';
+import {
+  ConcurrentModification,
+  type ConversationLog,
+  type ConversationRepository,
+  type ConversationSummary,
+  type HandoffQueue,
+  type HandoffTicket,
+  type MetricIncrement,
+  type MetricsStore,
+  type NoticeLedger,
+  type TimelineEntry,
+} from '../../application/ports.js';
 import { Conversation, type ConversationSnapshot } from '../../domain/conversation.js';
+import { TIMELINE_LIMIT, summarize } from './summary.js';
 
 /** Conversa parada há 30 dias some; a transferida também (o atendimento já terá acontecido). */
 const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -63,5 +75,73 @@ export class RedisHandoffQueue implements HandoffQueue {
       .hdel(`${this.prefix}${tenantId}:tickets`, conversationId)
       .zrem(`${this.prefix}${tenantId}:order`, conversationId)
       .exec();
+  }
+}
+
+/** Linha do tempo (lista limitada) e resumo por conversa, num hash por estúdio. */
+export class RedisConversationLog implements ConversationLog {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wba:log:',
+  ) {}
+
+  async record(conversation: Conversation, entries: readonly TimelineEntry[]): Promise<void> {
+    const timelineKey = `${this.prefix}${conversation.tenantId}:timeline:${conversation.id}`;
+    const pipeline = this.redis.multi();
+    if (entries.length > 0) {
+      pipeline.rpush(timelineKey, ...entries.map((e) => JSON.stringify(e))).ltrim(timelineKey, -TIMELINE_LIMIT, -1).expire(timelineKey, CONVERSATION_TTL_SECONDS);
+    }
+    await pipeline.exec();
+    const timeline = await this.timeline(conversation.tenantId, conversation.id);
+    await this.redis.hset(`${this.prefix}${conversation.tenantId}:summaries`, conversation.id, JSON.stringify(summarize(conversation, timeline)));
+  }
+
+  async summaries(tenantId: string): Promise<readonly ConversationSummary[]> {
+    const raw = await this.redis.hvals(`${this.prefix}${tenantId}:summaries`);
+    return raw.map((item) => JSON.parse(item) as ConversationSummary);
+  }
+
+  async timeline(tenantId: string, conversationId: string): Promise<readonly TimelineEntry[]> {
+    const raw = await this.redis.lrange(`${this.prefix}${tenantId}:timeline:${conversationId}`, 0, -1);
+    return raw.map((item) => JSON.parse(item) as TimelineEntry);
+  }
+}
+
+const METRICS_TTL_SECONDS = 45 * 24 * 60 * 60;
+
+/** Um hash por estúdio e dia; HINCRBY é atômico, então vários consumidores somam sem corrida. */
+export class RedisMetricsStore implements MetricsStore {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wba:metrics:',
+  ) {}
+
+  async add(tenantId: string, increments: readonly MetricIncrement[]): Promise<void> {
+    const pipeline = this.redis.multi();
+    for (const { day, field, by } of increments) {
+      const key = `${this.prefix}${tenantId}:${day}`;
+      pipeline.hincrby(key, field, by).expire(key, METRICS_TTL_SECONDS);
+    }
+    await pipeline.exec();
+  }
+
+  async read(tenantId: string, days: readonly string[]): Promise<Record<string, Record<string, number>>> {
+    const pipeline = this.redis.multi();
+    for (const day of days) pipeline.hgetall(`${this.prefix}${tenantId}:${day}`);
+    const results = (await pipeline.exec()) ?? [];
+    return Object.fromEntries(
+      days.map((day, i) => [day, Object.fromEntries(Object.entries((results[i]?.[1] as Record<string, string> | undefined) ?? {}).map(([k, v]) => [k, Number(v)]))]),
+    );
+  }
+}
+
+export class RedisNoticeLedger implements NoticeLedger {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wba:notice:',
+  ) {}
+
+  async claim(key: string): Promise<boolean> {
+    return (await this.redis.set(this.prefix + key, '1', 'EX', CONVERSATION_TTL_SECONDS, 'NX')) === 'OK';
   }
 }

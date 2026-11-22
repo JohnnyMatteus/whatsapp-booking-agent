@@ -49,6 +49,16 @@ describe('ACL WhatsApp: resposta do domínio → Cloud API', () => {
     expect(translateReply(reply)).toEqual(expected('buttons'));
   });
 
+  it('template aprovado vira mensagem de template com os parâmetros no corpo', () => {
+    const reply: ReplyRequested = {
+      tenantId: 'estudio-lotus',
+      contactId: '5511900000001',
+      content: { kind: 'template', template: 'vaga_liberada', params: ['Pilates Solo', 'qua 04/03 07:00'] },
+    };
+
+    expect(translateReply(reply)).toEqual(expected('template'));
+  });
+
   it('corta por caractere, sem quebrar emoji ou acento', () => {
     const value = 'Aula de Yoga Restaurativa 🧘 com respiração';
 

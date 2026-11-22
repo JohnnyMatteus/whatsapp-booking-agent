@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryConversationRepository, InMemoryHandoffQueue } from '../../src/adapters/persistence/in-memory.js';
+import { InMemoryConversationLog, InMemoryConversationRepository, InMemoryHandoffQueue, InMemoryMetricsStore } from '../../src/adapters/persistence/in-memory.js';
 import { HandleInboundMessage } from '../../src/application/handle-inbound.js';
 import type { AgentResult, ConversationAgent, InboundCommand, OutboundMessage, OutboundPublisher, Turn } from '../../src/application/ports.js';
+import { MetricsRecorder } from '../../src/application/metrics-recorder.js';
 import { ResumeConversation } from '../../src/application/resume-conversation.js';
 import type { Conversation } from '../../src/domain/conversation.js';
 import { NOW } from '../domain/fixtures.js';
@@ -34,15 +35,18 @@ const command = (messageId: string, text = 'oi'): InboundCommand => ({
   turn: { kind: 'text', text },
 });
 
-function setup(behavior: (c: Conversation) => AgentResult = () => ({ replies: [{ kind: 'text', text: 'Olá!' }], outcome: 'answered' })) {
+function setup(behavior: (c: Conversation) => AgentResult = () => ({ replies: [{ kind: 'text', text: 'Olá!' }], outcome: 'answered', citations: [] })) {
   const conversations = new InMemoryConversationRepository();
   const handoffs = new InMemoryHandoffQueue();
   const publisher = new RecordingPublisher();
   const agent = new ScriptedAgent(behavior);
   const clock = { now: () => NOW };
-  const handle = new HandleInboundMessage({ conversations, agent, publisher, handoffs, clock });
-  const resume = new ResumeConversation({ conversations, handoffs, clock });
-  return { conversations, handoffs, publisher, agent, handle, resume };
+  const log = new InMemoryConversationLog();
+  const metricsStore = new InMemoryMetricsStore();
+  const metrics = new MetricsRecorder(metricsStore, 'America/Sao_Paulo');
+  const handle = new HandleInboundMessage({ conversations, agent, publisher, handoffs, log, metrics, clock });
+  const resume = new ResumeConversation({ conversations, handoffs, publisher, log, metrics, clock });
+  return { conversations, handoffs, publisher, agent, handle, resume, log, metricsStore };
 }
 
 describe('HandleInboundMessage', () => {
@@ -61,7 +65,7 @@ describe('HandleInboundMessage', () => {
   it('transferência publica ticket, entra na fila de atendimento e silencia o bot', async () => {
     const t = setup((conversation) => {
       conversation.handOff('explicit_request', NOW);
-      return { replies: [{ kind: 'text', text: 'Vou chamar alguém.' }], outcome: 'handed_off' };
+      return { replies: [{ kind: 'text', text: 'Vou chamar alguém.' }], outcome: 'handed_off', citations: [] };
     });
 
     await t.handle.execute(command('wamid.1', 'quero um atendente'));
@@ -70,6 +74,9 @@ describe('HandleInboundMessage', () => {
     expect(later).toBe('silenced');
     expect(t.agent.turns).toHaveLength(1);
     expect(t.publisher.published.map((m) => m.kind)).toEqual(['reply', 'handoff']);
+    // A mensagem recebida depois da transferência fica registrada para o atendente ler.
+    expect((await t.log.timeline('estudio-lotus', 'estudio-lotus:5511900000001')).map((e) => e.kind)).toEqual(['student', 'bot', 'handoff', 'student']);
+    expect((await t.log.summaries('estudio-lotus'))[0]).toMatchObject({ status: 'handed_off', lastMessage: { author: 'student', preview: 'alô?' } });
     expect(await t.handoffs.list('estudio-lotus')).toEqual([
       expect.objectContaining({ conversationId: 'estudio-lotus:5511900000001', reason: 'explicit_request' }),
     ]);
@@ -87,7 +94,7 @@ describe('HandleInboundMessage', () => {
     let handOff = true;
     const t = setup((conversation) => {
       if (handOff) conversation.handOff('sensitive_topic', NOW);
-      return { replies: [], outcome: handOff ? 'handed_off' : 'answered' };
+      return { replies: [], outcome: handOff ? 'handed_off' : 'answered', citations: [] };
     });
     await t.handle.execute(command('wamid.1'));
 
@@ -96,6 +103,8 @@ describe('HandleInboundMessage', () => {
 
     expect(await t.handoffs.list('estudio-lotus')).toEqual([]);
     expect(await t.handle.execute(command('wamid.2'))).toBe('answered');
+    expect(t.publisher.published.some((m) => m.kind === 'reply' && m.reply.kind === 'text' && /Voltei a atender/.test(m.reply.text))).toBe(true);
+    expect((await t.log.timeline('estudio-lotus', 'estudio-lotus:5511900000001')).map((e) => e.kind)).toContain('resumed');
   });
 
   it('recusa devolver conversa inexistente', async () => {
