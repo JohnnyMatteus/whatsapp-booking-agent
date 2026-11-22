@@ -34,7 +34,8 @@ const Env = z.object({
   WHATSMIAU_MEDIA_HOSTS: z.string().optional(),
   SENDER_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   SENDER_RETRY_DELAY_MS: z.coerce.number().int().min(100).default(5000),
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  // Vazio = sem exportação: é o que o compose passa por padrão.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
 });
 
 export interface GatewayConfig extends Omit<z.infer<typeof Env>, 'TENANT_CHANNELS'> {

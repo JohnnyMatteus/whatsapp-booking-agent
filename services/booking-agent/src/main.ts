@@ -11,10 +11,11 @@ import { connectMcp } from './adapters/mcp/connect.js';
 import { McpSchedulingTools } from './adapters/mcp/scheduling-tools.js';
 import { createInboundHandler } from './adapters/messaging/consumer.js';
 import { toEnvelopes } from './adapters/messaging/mapping.js';
-import { RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMediaNotes, RedisMetricsStore, RedisNoticeLedger } from './adapters/persistence/redis.js';
+import { RedisConversationLog, RedisConversationRepository, RedisContactLock, RedisHandoffQueue, RedisMediaNotes, RedisMetricsStore, RedisNoticeLedger, RedisOutbox } from './adapters/persistence/redis.js';
 import { LangGraphConversationAgent } from './agent/graph.js';
 import { HandleInboundMessage } from './application/handle-inbound.js';
 import { MetricsRecorder } from './application/metrics-recorder.js';
+import { OutboxRelay } from './application/outbox-relay.js';
 import { NotifyStudent } from './application/notify-student.js';
 import { PanelQueries } from './application/panel-queries.js';
 import { ReminderScheduler } from './application/reminder-scheduler.js';
@@ -58,14 +59,30 @@ const agent = new LangGraphConversationAgent({
   observer: metrics.observer,
 });
 
-const useCase = new HandleInboundMessage({ conversations, agent, publisher, handoffs, log, metrics: recorder, clock });
+const outbox = new RedisOutbox(redis);
+const onOutboxError = (error: unknown) => logger.warn({ error: error instanceof Error ? error.name : 'unknown' }, 'outbox_publish_failed');
+const useCase = new HandleInboundMessage({ conversations, agent, publisher, outbox, onPublishError: onOutboxError, handoffs, log, metrics: recorder, clock });
 await bus.consume(
   Queues.bookingAgent,
-  { prefetch: config.CONSUMER_PREFETCH, maxAttempts: config.CONSUMER_MAX_ATTEMPTS, retryDelayMs: config.CONSUMER_RETRY_DELAY_MS },
-  createInboundHandler({ useCase, metrics, recorder, mediaNotes, logger, tracer: tracing.tracer }),
+  { prefetch: config.CONSUMER_PREFETCH, maxAttempts: config.CONSUMER_MAX_ATTEMPTS, retryDelayMs: config.CONSUMER_RETRY_DELAY_MS, maxDeferMs: config.CONSUMER_MAX_DEFER_MS },
+  createInboundHandler({ useCase, metrics, recorder, mediaNotes, locks: new RedisContactLock(redis, { waitMs: config.CONTACT_LOCK_WAIT_MS }), logger, tracer: tracing.tracer }),
 );
 // A fila de atendimento existe mesmo sem consumidor dedicado: as mensagens ficam guardadas.
 await bus.declareQueue(Queues.attendance, config.CONSUMER_RETRY_DELAY_MS);
+
+// Varredor da caixa de saída: publica o que o turno não conseguiu publicar na hora (broker fora do ar, queda
+// entre salvar e publicar). Roda também na subida, para esvaziar o que ficou de uma instância anterior.
+const relay = new OutboxRelay({ outbox, publisher, onError: onOutboxError });
+const sweepOutbox = () =>
+  relay.sweep().then(
+    async (sent) => {
+      if (sent > 0) metrics.outboxPublished.inc(sent);
+      metrics.outboxPending.set((await outbox.pending(100)).length);
+    },
+    (error: unknown) => logger.error({ error: error instanceof Error ? error.name : 'unknown' }, 'outbox_sweep_failed'),
+  );
+void sweepOutbox();
+const outboxTimer = setInterval(() => void sweepOutbox(), config.OUTBOX_SWEEP_INTERVAL_MS);
 
 const notify = new NotifyStudent({ tools, conversations, publisher, log, metrics: recorder, ledger: new RedisNoticeLedger(redis), clock, timezone: config.STUDIO_TIMEZONE });
 const reminders = new ReminderScheduler({ log, conversations, notify, clock, onError: (error) => logger.warn({ error: error instanceof Error ? error.name : 'unknown' }, 'reminder_skipped') });
@@ -82,8 +99,8 @@ const api = buildPanelApi({
   verifier: createJwtVerifier({ issuer: config.OIDC_ISSUER, audience: config.OIDC_AUDIENCE, keys: remoteKeys(config.OIDC_JWKS_URL) }),
   internalToken: config.INTERNAL_API_TOKEN,
   queries: new PanelQueries({ conversations, log, metrics: metricsStore, mediaNotes, thumbnails: new HttpThumbnailSource(config.MEDIA_PROCESSOR_URL, config.MEDIA_API_TOKEN), clock, timezone: config.STUDIO_TIMEZONE }),
-  reply: new ReplyAsAttendant({ conversations, publisher, log, metrics: recorder, clock }),
-  resume: new ResumeConversation({ conversations, handoffs, publisher, log, metrics: recorder, clock }),
+  reply: new ReplyAsAttendant({ conversations, publisher, outbox, log, metrics: recorder, clock }),
+  resume: new ResumeConversation({ conversations, handoffs, publisher, outbox, log, metrics: recorder, clock }),
   notify,
   registry,
 });
@@ -92,6 +109,7 @@ logger.info({ queue: Queues.bookingAgent.name, port: config.PORT }, 'booking_age
 
 const shutdown = async () => {
   clearInterval(reminderTimer);
+  clearInterval(outboxTimer);
   await api.close();
   await bus.close();
   await mcp.close();

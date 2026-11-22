@@ -44,7 +44,7 @@ flowchart LR
   webhook <--> redis[(Redis)]
   mq -- inbound.media_received --> media[media-processor · Python<br/>valida · miniatura · transcreve]
   media -- bytes da mídia, API interna --> webhook
-  media --> s3[(MinIO/S3)]
+  media --> s3[(S3 · LocalStack)]
   media -- message_received · media.processed --> mq
   mq --> agent[booking-agent · TS<br/>domínio de Agendamento<br/>agente LangGraph]
   agent <--> redis
@@ -76,7 +76,7 @@ Pré-requisitos: Docker 27+, Node 22+ com pnpm 12, Go 1.26+, Python 3.12+.
 ```bash
 cp .env.example .env
 make install          # dependências locais (pnpm, Go e venv do media-processor)
-make up               # serviços, RabbitMQ, Redis, MinIO, mocks da Cloud API e do SaaS, observabilidade
+make up               # serviços, RabbitMQ, Redis, S3 local (LocalStack), mocks da Cloud API e do SaaS, observabilidade
 make up-llm           # opcional: Ollama local e o modelo do LLM_MODEL
 make seed             # envia ao webhook (via api-gateway) uma mensagem assinada como a Meta
 make up-whatsmiau     # opcional: estudio-sol atendido pelo Whatsmiau (mock) e estudio-lotus na Cloud API
@@ -95,7 +95,9 @@ make seed TEXT="me conta uma piada"
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
-O api-gateway lê a chave pública do Keycloak só ao subir: se o Keycloak gerar outro par (volume `keycloak-data` apagado por `make clean`), todo token dá 401 até `docker compose restart api-gateway`.
+O api-gateway lê a chave pública do Keycloak só ao subir: se o contêiner do Keycloak for recriado, ele gera outro par e todo token dá 401 até `docker compose restart api-gateway`.
+
+Para um cluster há um chart Helm em [`deploy/helm/wba`](deploy/helm/wba) (nunca instalado; ver o README dele).
 
 Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas com datas relativas a hoje. Para usar o SaaS real pela rede compartilhada do portfólio: `make network && make up-portfolio`.
 
@@ -105,7 +107,9 @@ Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas 
 make lint             # ESLint, typecheck (tsc e vue-tsc), gofmt + go vet, ruff + mypy
 make test             # unitários e de contrato, sem Docker e sem LLM real
 make test-integration # Redis e RabbitMQ reais via testcontainers (roda no CI)
-# o CI também valida o Kong (kong config parse + smoke) e o compose com todos os profiles
+# o CI também valida o Kong (kong config parse + smoke) e o compose com todos os profiles, e o job e2e sobe o profile core
+# (Keycloak e Kong reais) e roda scripts/e2e.sh (webhook assinado até a resposta no mock da Cloud API, idempotência, painel
+# autenticado, isolamento entre estúdios) e a carga no webhook com k6 (infra/load/webhook.js: 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens do mesmo contato; o job confere que a fila do agente esvazia e a DLQ termina vazia)
 ```
 
 O que vale olhar:
@@ -129,7 +133,7 @@ O CI ([`ci.yml`](.github/workflows/ci.yml)) roda um job por serviço, mais os te
 | [0004](docs/adr/0004-transferencia-para-humano.md) | Transferência por pedido, tema sensível ou 2 falhas seguidas; o bot silencia |
 | [0005](docs/adr/0005-idempotencia.md) | Idempotência pelo id da mensagem no webhook e na Conversa |
 | [0006](docs/adr/0006-mensageria-rabbitmq.md) | RabbitMQ: exchange topic, filas quorum, retry com TTL e DLQ por consumidor |
-| [0007](docs/adr/0007-infraestrutura-local-e-servicos-emulados.md) | Docker com profiles, WireMock no lugar da Meta e do SaaS, MinIO para áudio |
+| [0007](docs/adr/0007-infraestrutura-local-e-servicos-emulados.md) | Docker com profiles, WireMock no lugar da Meta e do SaaS, LocalStack (S3) para áudio |
 | [0008](docs/adr/0008-agente-langgraph-como-adapter.md) | Agente LangGraph como adapter: o LLM não chama ferramentas, saída por schema com um retry, citação garantida por código |
 | [0009](docs/adr/0009-vinculo-telefone-aluno-conta-de-servico.md) | Vínculo telefone → aluno por opt-in (`vincular 123456`) e conta de serviço por estúdio no Keycloak, sem token exchange com impersonation |
 | [0010](docs/adr/0010-messaging-gateway-e-provedores-de-whatsapp.md) | Messaging-gateway: porta `MessagingProvider`, Cloud API e Whatsmiau por estúdio, riscos do Whatsmiau e quando usar cada um |
@@ -143,20 +147,19 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 - **Grafo com nós fixos em vez de agente livre**: perde naturalidade em pedidos compostos ("cancela a de terça e marca a de quarta" vira dois turnos) e ganha garantias testáveis.
 - **Três runtimes** (Node, Go, Python) mais o Kong: mais CI e mais manutenção, em troca do SDK MCP oficial em Go e do ecossistema de transcrição em Python.
-- **Publicar antes de salvar**: uma queda no meio gera resposta duplicada (rara) em vez de perdida. Outbox está nos próximos passos.
+- **Caixa de saída no Redis em vez de banco transacional**: a Conversa e as respostas do turno são gravadas juntas por um script Lua e publicadas depois ([ADR 0014](docs/adr/0014-outbox-e-exclusao-mutua-por-contato.md)); entrega pelo menos uma vez (duplicata rara), e o lock por contato evita turnos simultâneos mas não garante ordem.
 - **Tradutores duplicados de propósito** (Go e TypeScript): custo de manutenção para proteger os agregados mesmo contra um servidor MCP com bug.
 - **Duas falhas para transferir**: agressivo, para o aluno não repetir a pergunta três vezes.
 
 ## Próximos passos
 
-1. Outbox no booking-agent e serialização por contato na fila (hoje: publicar antes de salvar e compare-and-set com retry).
-2. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
-3. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
-4. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
-5. Testes de mutação no domínio e de carga no webhook no CI.
-6. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
-7. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
-8. Deploy com Helm atrás do `platform-edge`.
+1. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
+2. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
+3. Teste de integração do media-processor com RabbitMQ e S3 reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
+4. Testes de mutação no domínio (Stryker): falta adicionar a dependência e o lockfile, o que exige instalar pacotes.
+5. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
+6. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
+7. Instalar o chart (`deploy/helm/wba`, validado só por `helm lint` e `helm template` no CI) num cluster e ligá-lo ao gateway compartilhado do `platform-edge`.
 
 ## Licença
 

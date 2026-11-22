@@ -7,7 +7,7 @@ WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:${GATEWAY_PORT:-8000}/webhooks/clou
 SECRET="${WHATSAPP_APP_SECRET:-dev-only-change-me-app-secret}"
 TEXT="${1:-Quais horários tem amanhã?}"
 NOW="$(date +%s)"
-MESSAGE_ID="wamid.SEED${NOW}${RANDOM}"
+MESSAGE_ID="${MESSAGE_ID:-wamid.SEED${NOW}${RANDOM}}"
 
 BODY=$(printf '{"object":"whatsapp_business_account","entry":[{"id":"200000000000001","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"15550000001","phone_number_id":"100000000000001"},"contacts":[{"profile":{"name":"Aluna Exemplo"},"wa_id":"5511900000001"}],"messages":[{"from":"5511900000001","id":"%s","timestamp":"%s","type":"text","text":{"body":"%s"}}]}}]}]}' "$MESSAGE_ID" "$NOW" "$TEXT")
 SIGNATURE="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')"

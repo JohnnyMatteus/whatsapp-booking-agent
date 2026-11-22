@@ -188,9 +188,18 @@ jobs:
             for i in $(seq 1 30); do docker exec gw kong health >/dev/null 2>&1 && break; sleep 2; done
             PANEL_JWT_PRIVATE_KEY_FILE="$RUNNER_TEMP/keys/private.pem" infra/gateway/smoke.sh http://127.0.0.1:8000 || { docker logs gw; exit 1; }
           } 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+      - name: Roda como no Kubernetes (UID numérico, raiz somente leitura, só /tmp gravável) e passa no mesmo smoke
+        run: |
+          set -o pipefail
+          {
+            docker run -d --name gw-ro --read-only --user 10001:10001 --tmpfs /tmp -p 8010:8000 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e PANEL_JWT_PUBLIC_KEY_FILE=/keys/public.pem -v "$RUNNER_TEMP/keys:/keys:ro" whatsapp-booking-agent/api-gateway:ci
+            for i in $(seq 1 30); do docker exec gw-ro kong health >/dev/null 2>&1 && break; sleep 2; done
+            docker exec gw-ro id -u | grep -qx 10001
+            PANEL_JWT_PRIVATE_KEY_FILE="$RUNNER_TEMP/keys/private.pem" infra/gateway/smoke.sh http://127.0.0.1:8010 || { docker logs gw-ro; exit 1; }
+          } 2>&1 | tee "$RUNNER_TEMP/smoke-ro.log"
       - name: Diagnóstico dos passos que falharam
         if: failure()
-        run: python3 scripts/ci-annotate.py api-gateway "$RUNNER_TEMP/kong-config.log" "$RUNNER_TEMP/smoke.log"
+        run: python3 scripts/ci-annotate.py api-gateway "$RUNNER_TEMP/kong-config.log" "$RUNNER_TEMP/smoke.log" "$RUNNER_TEMP/smoke-ro.log"
 
   web:
     name: web (painel Vue)
@@ -214,6 +223,19 @@ jobs:
         run: pnpm --filter @wba/web build
       - name: Imagem Docker
         run: docker build -f web/Dockerfile -t whatsapp-booking-agent/web:ci .
+      - name: Roda como no Kubernetes (UID 101, raiz somente leitura, só /tmp, conf.d e cache graváveis como um emptyDir, 1777)
+        run: |
+          set -o pipefail
+          {
+            docker run -d --name web-ro --read-only --user 101:101 --tmpfs /tmp --tmpfs /etc/nginx/conf.d:mode=1777 --tmpfs /var/cache/nginx:mode=1777 -p 8080:8080 -e GATEWAY_URL=http://127.0.0.1:1 -e OIDC_ISSUER=http://127.0.0.1:8180/realms/wba -e OIDC_CLIENT_ID=wba-panel whatsapp-booking-agent/web:ci
+            for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1 && break; sleep 1; done
+            curl -fsS http://127.0.0.1:8080/healthz || { docker logs web-ro; exit 1; }
+            curl -fsS http://127.0.0.1:8080/config.json | grep -q '"clientId":"wba-panel"' || { docker logs web-ro; exit 1; }
+            docker exec web-ro id -u | grep -qx 101
+          } 2>&1 | tee "$RUNNER_TEMP/web-ro.log"
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py web "$RUNNER_TEMP/web-ro.log"
 
   infra:
     name: infraestrutura (compose, Prometheus, mocks, scripts)
@@ -227,7 +249,7 @@ jobs:
         run: |
           set -o pipefail
           {
-            docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
+            docker compose --profile core --profile observability --profile llm --profile whatsmiau config -q
             docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
           } 2>&1 | tee "$RUNNER_TEMP/compose.log"
       - name: promtool valida configuração e alertas
@@ -244,7 +266,82 @@ jobs:
       - name: ShellCheck
         run: |
           set -o pipefail
-          shellcheck scripts/*.sh infra/minio/*.sh infra/gateway/*.sh 2>&1 | tee "$RUNNER_TEMP/shellcheck.log"
+          shellcheck scripts/*.sh infra/localstack/*.sh infra/gateway/*.sh 2>&1 | tee "$RUNNER_TEMP/shellcheck.log"
       - name: Diagnóstico dos passos que falharam
         if: failure()
         run: python3 scripts/ci-annotate.py infraestrutura "$RUNNER_TEMP/compose.log" "$RUNNER_TEMP/promtool.log" "$RUNNER_TEMP/wiremock.log" "$RUNNER_TEMP/shellcheck.log"
+
+  helm:
+    name: helm (lint e template do chart, sem cluster)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: helm lint e helm template (imagem do Helm; nada é instalado em cluster)
+        run: |
+          set -o pipefail
+          {
+            helm() { docker run --rm -v "$PWD/deploy/helm:/charts:ro" alpine/helm:3.17.1 "$@"; }
+            helm lint /charts/wba --set secretName=wba-secrets
+            helm template wba /charts/wba --set secretName=wba-secrets --set ingress.enabled=true > "$RUNNER_TEMP/rendered.yaml"
+            test "$(grep -c '^kind: Deployment' "$RUNNER_TEMP/rendered.yaml")" = 7
+            test "$(grep -c '^kind: Service$' "$RUNNER_TEMP/rendered.yaml")" = 7
+            # Todo Deployment roda com UID numérico e runAsNonRoot: o kubelet recusa usuário só por nome.
+            test "$(grep -cE '^ +runAsUser: [0-9]+$' "$RUNNER_TEMP/rendered.yaml")" = 7
+            test "$(grep -cE '^ +runAsGroup: [0-9]+$' "$RUNNER_TEMP/rendered.yaml")" = 7
+            test "$(grep -c 'runAsNonRoot: true' "$RUNNER_TEMP/rendered.yaml")" = 7
+            if helm template wba /charts/wba --set secretName=wba-secrets --set services.web.uid=nginx >/dev/null 2>&1; then echo "FALHA o chart aceitou uid não numérico"; exit 1; fi
+            grep -q '^kind: NetworkPolicy' "$RUNNER_TEMP/rendered.yaml"
+            grep -q '^kind: Ingress' "$RUNNER_TEMP/rendered.yaml"
+            # Sem secretName o chart precisa falhar: ele não cria segredos.
+            if helm template wba /charts/wba >/dev/null 2>&1; then echo "FALHA o chart renderizou sem secretName"; exit 1; fi
+          } 2>&1 | tee "$RUNNER_TEMP/helm.log"
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py helm "$RUNNER_TEMP/helm.log"
+
+  e2e:
+    name: ponta a ponta (compose real, Keycloak, Kong) e carga no webhook
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Sobe o profile core (build das imagens, healthchecks, Keycloak com o realm importado)
+        run: docker compose --profile core up -d --build --wait --wait-timeout 900
+      - name: Ponta a ponta (webhook assinado até a resposta no mock da Cloud API, painel por Keycloak, isolamento)
+        run: |
+          set -o pipefail
+          scripts/e2e.sh 2>&1 | tee "$RUNNER_TEMP/e2e.log"
+      - name: "Carga no webhook (k6, 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens de um contato)"
+        run: |
+          set -o pipefail
+          docker run --rm --network whatsapp-booking-net -v "$PWD/infra/load:/scripts:ro" grafana/k6:1.0.0 run /scripts/webhook.js 2>&1 | tee "$RUNNER_TEMP/k6.log"
+      - name: A fila do agente esvazia e a DLQ termina vazia (ocupação de contato não é falha)
+        run: |
+          set -o pipefail
+          {
+            api() { curl -fsS -u wba:dev-only-change-me "http://127.0.0.1:15672/api/queues/%2F/$1" | python3 -c 'import json,sys; q=json.load(sys.stdin); print(q["messages"])'; }
+            for _ in $(seq 1 90); do
+              pending="$(api booking-agent.inbound)"; retry="$(api booking-agent.inbound.retry)"
+              [ "$pending" = 0 ] && [ "$retry" = 0 ] && break
+              sleep 2
+            done
+            echo "pendentes=$pending em retry=$retry"
+            [ "$pending" = 0 ] && [ "$retry" = 0 ] || { echo "FALHA a fila do agente não esvaziou"; exit 1; }
+            dlq="$(api booking-agent.inbound.dlq)"
+            echo "DLQ do booking-agent: $dlq"
+            [ "$dlq" = 0 ] || { echo "FALHA a DLQ do booking-agent não está vazia"; exit 1; }
+          } 2>&1 | tee "$RUNNER_TEMP/dlq.log"
+      - name: Logs dos serviços quando algo falhou
+        if: failure()
+        run: docker compose --profile core logs --no-color --tail=200
+      - name: Diagnóstico dos passos que falharam
+        if: failure()
+        run: python3 scripts/ci-annotate.py e2e "$RUNNER_TEMP/e2e.log" "$RUNNER_TEMP/k6.log" "$RUNNER_TEMP/dlq.log"
+      - name: Derruba o ambiente
+        if: always()
+        run: docker compose --profile core down -v --remove-orphans

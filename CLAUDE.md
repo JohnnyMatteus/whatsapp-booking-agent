@@ -28,7 +28,7 @@ make test-integration  # testcontainers (deixe para o CI)
 make build             # bundles Node, painel e binário Go
 make up / make down / make logs / make ps / make seed / make clean
 make up-whatsmiau / make seed-whatsmiau / make panel-token / make gateway-smoke
-docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
+docker compose --profile core --profile observability --profile llm --profile whatsmiau config -q
 ```
 
 Por serviço: `pnpm --filter @wba/<pacote> test|typecheck|build`, `make -C services/saas-mcp-server test`, `make -C services/media-processor test`.
@@ -47,7 +47,7 @@ services/booking-agent    src/domain, src/application (portas e casos de uso), s
 services/saas-mcp-server  internal/scheduling (núcleo), internal/adapters/saas (ACL), internal/mcpserver, cmd/
 services/media-processor  src/media_processor (domínio, portas, caso de uso ProcessMedia, adaptadores: gateway, S3, Pillow)
 web/                      painel Vue 3 + Vuetify + TanStack Query
-infra/                    WireMock (Cloud API, Whatsmiau e SaaS), Prometheus, nginx, MinIO, Grafana
+infra/                    WireMock (Cloud API, Whatsmiau e SaaS), Prometheus, nginx, LocalStack (S3), Grafana
 docs/                     design doc, ADRs, roteiros
 ```
 

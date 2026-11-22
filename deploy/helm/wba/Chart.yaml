@@ -1,0 +1,6 @@
+apiVersion: v2
+name: wba
+description: whatsapp-booking-agent (api-gateway, messaging-gateway, booking-agent, saas-mcp-server, media-processor e painel)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

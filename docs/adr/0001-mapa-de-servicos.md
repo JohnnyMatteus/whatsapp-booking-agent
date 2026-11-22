@@ -12,7 +12,7 @@ O sistema tem quatro cargas de trabalho com perfis diferentes: receber o webhook
 | --- | --- | --- |
 | `infra/gateway` (api-gateway) | Kong OSS DB-less | Única entrada pública: roteia webhooks (sem JWT) e a API do painel (JWT), rate limit. ADR 0012. |
 | `services/messaging-gateway` | TypeScript (Fastify) | Serviço de integrações. Porta `MessagingProvider` com os provedores de WhatsApp (Cloud API e Whatsmiau, por estúdio), ACL de cada um, webhook, status de entrega, mídia e sender (retry e DLQ). Dois processos na mesma imagem: **webhook** e **sender**. ADR 0010. |
-| `services/media-processor` | Python | Valida, guarda no MinIO/S3, gera miniatura e transcreve áudio (faster-whisper local atrás de porta). ADR 0011. |
+| `services/media-processor` | Python | Valida, guarda no S3, gera miniatura e transcreve áudio (faster-whisper local atrás de porta). ADR 0011. |
 | `services/booking-agent` | TypeScript (LangGraph.js) | Domínio de Agendamento, casos de uso, agente como adapter de aplicação, API do painel. Fala só com o messaging-gateway, por fila. |
 | `services/saas-mcp-server` | Go (SDK oficial `modelcontextprotocol/go-sdk`) | As quatro ferramentas MCP e a ACL do SaaS. |
 | `web/` | Vue 3 + Vuetify + TanStack Query | Painel do estúdio (fila de atendimento nesta rodada). |

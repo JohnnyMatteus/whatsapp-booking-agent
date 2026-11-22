@@ -30,7 +30,7 @@ up-portfolio: network ## Sobe o núcleo ligado ao saas-multitenant real pela por
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.portfolio.yml --profile core up -d --build --wait
 
 down: ## Para os contêineres (mantém volumes)
-	$(COMPOSE) $(PROFILES) --profile llm --profile tools down
+	$(COMPOSE) $(PROFILES) --profile llm down
 
 logs: ## Acompanha os logs
 	$(COMPOSE) $(PROFILES) logs -f --tail=100
@@ -72,5 +72,5 @@ build: ## Bundles Node, painel e binário Go
 	$(MAKE) -C services/saas-mcp-server build
 
 clean: ## Remove contêineres, volumes e artefatos de build
-	$(COMPOSE) $(PROFILES) --profile llm --profile tools down -v --remove-orphans
+	$(COMPOSE) $(PROFILES) --profile llm down -v --remove-orphans
 	rm -rf services/booking-agent/dist services/messaging-gateway/dist web/dist services/saas-mcp-server/bin

@@ -42,7 +42,7 @@ export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}
       return result;
     },
   };
-  const inbound = new HandleInboundMessage({ conversations, agent, publisher, handoffs, log, metrics, clock });
+  const inbound = new HandleInboundMessage({ conversations, agent, publisher, outbox: conversations.outbox, handoffs, log, metrics, clock });
   if (options.handedOff) {
     result = { replies: [{ kind: 'text', text: 'Vou chamar alguém.' }], outcome: 'handed_off', citations: [] };
     await inbound.execute({ tenantId: TENANT, contactId: CONTACT, messageId: 'wamid.1', turn: { kind: 'text', text: 'estou com dor' } });
@@ -53,8 +53,8 @@ export async function setup(options: { handedOff?: boolean; idp?: TestIdp } = {}
     verifier: createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, keys: idp.keys }),
     internalToken: 'dev-only-internal-token',
     queries: new PanelQueries({ conversations, log, metrics: metricsStore, mediaNotes, thumbnails, clock, timezone: 'America/Sao_Paulo' }),
-    reply: new ReplyAsAttendant({ conversations, publisher, log, metrics, clock }),
-    resume: new ResumeConversation({ conversations, handoffs, publisher, log, metrics, clock }),
+    reply: new ReplyAsAttendant({ conversations, publisher, outbox: conversations.outbox, log, metrics, clock }),
+    resume: new ResumeConversation({ conversations, handoffs, publisher, outbox: conversations.outbox, log, metrics, clock }),
     notify: new NotifyStudent({ tools, conversations, publisher, log, metrics, ledger: new InMemoryNoticeLedger(), clock, timezone: 'America/Sao_Paulo' }),
     registry: createMetricsRegistry('test'),
   });

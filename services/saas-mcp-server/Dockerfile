@@ -8,6 +8,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/saas-mcp-server ./
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/saas-mcp-server /saas-mcp-server
-USER nonroot:nonroot
+# UID numérico (65532 é o usuário nonroot da imagem distroless): o kubelet recusa runAsNonRoot só com o nome.
+USER 65532:65532
 EXPOSE 8090
 ENTRYPOINT ["/saas-mcp-server"]

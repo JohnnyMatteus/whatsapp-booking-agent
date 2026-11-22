@@ -1,7 +1,9 @@
 // Caso de uso central: uma mensagem do aluno entra, a conversa decide se o bot fala, o agente
 // responde e as saídas são publicadas.
+import { randomUUID } from 'node:crypto';
 import { Conversation } from '../domain/conversation.js';
 import type { MetricsRecorder } from './metrics-recorder.js';
+import { OutboxRelay } from './outbox-relay.js';
 import { botEntries, citationsOf, handoffEntry, studentEntry } from './timeline.js';
 import type {
   Clock,
@@ -11,6 +13,8 @@ import type {
   HandoffQueue,
   HandoffTicket,
   InboundCommand,
+  Outbox,
+  OutboxEntry,
   OutboundMessage,
   OutboundPublisher,
   TurnOutcome,
@@ -22,6 +26,9 @@ export interface HandleInboundDeps {
   readonly conversations: ConversationRepository;
   readonly agent: ConversationAgent;
   readonly publisher: OutboundPublisher;
+  readonly outbox: Outbox;
+  /** Chamado quando a publicação imediata falha; o varredor da caixa de saída tenta de novo. */
+  readonly onPublishError?: (error: unknown) => void;
   readonly handoffs: HandoffQueue;
   readonly log: ConversationLog;
   readonly metrics: MetricsRecorder;
@@ -29,10 +36,14 @@ export interface HandleInboundDeps {
 }
 
 export class HandleInboundMessage {
-  constructor(private readonly deps: HandleInboundDeps) {}
+  private readonly relay: OutboxRelay;
+
+  constructor(private readonly deps: HandleInboundDeps) {
+    this.relay = new OutboxRelay({ outbox: deps.outbox, publisher: deps.publisher, ...(deps.onPublishError ? { onError: deps.onPublishError } : {}) });
+  }
 
   async execute(command: InboundCommand): Promise<HandleResult> {
-    const { conversations, agent, publisher, handoffs, log, metrics, clock } = this.deps;
+    const { conversations, agent, handoffs, log, metrics, clock } = this.deps;
     const now = clock.now();
     const conversation =
       (await conversations.load(command.tenantId, command.contactId)) ??
@@ -56,11 +67,13 @@ export class HandleInboundMessage {
       ...tickets.map((ticket): OutboundMessage => ({ kind: 'handoff', ticket })),
     ];
 
-    // Publica antes de salvar: se cair no meio, a reentrega responde de novo (duplicata rara)
-    // em vez de perder a resposta. Trade-off e alternativa (outbox) no ADR 0005.
-    await publisher.publish(outbound, command.messageId);
+    // Outbox (ADR 0014): a conversa e as saídas são gravadas juntas, de uma vez. Cair antes não grava nada (a
+    // reentrega refaz o turno); cair depois deixa as saídas na caixa para o varredor publicar. Conflito de
+    // versão também não publica nada, ao contrário do antigo "publicar e depois salvar".
+    const entry: OutboxEntry | undefined = outbound.length > 0 ? { id: randomUUID(), correlationId: command.messageId, messages: outbound } : undefined;
     for (const ticket of tickets) await handoffs.enqueue(ticket);
-    await conversations.save(conversation);
+    await conversations.save(conversation, entry);
+    if (entry) await this.relay.deliver(entry);
 
     const fetchedAt = conversation.snapshot().offeredAt ?? now.toISOString();
     const entries = [

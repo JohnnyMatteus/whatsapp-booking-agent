@@ -10,10 +10,11 @@ Formato: Contexto, Decisão, Consequências e Alternativas. Status: Aceito, salv
 | [0004](0004-transferencia-para-humano.md) | Transferência para humano por pedido, tema sensível ou falha repetida; bot silencia |
 | [0005](0005-idempotencia.md) | Idempotência pelo id da mensagem no webhook (Redis) e na Conversa |
 | [0006](0006-mensageria-rabbitmq.md) | RabbitMQ com exchange topic, filas quorum, retry com TTL e DLQ por consumidor |
-| [0007](0007-infraestrutura-local-e-servicos-emulados.md) | Infraestrutura local com Docker, WireMock no lugar da Cloud API e do SaaS, MinIO para áudio |
+| [0007](0007-infraestrutura-local-e-servicos-emulados.md) | Infraestrutura local com Docker, WireMock no lugar da Cloud API e do SaaS, LocalStack (S3) para áudio |
 | [0008](0008-agente-langgraph-como-adapter.md) | Agente LangGraph como adapter de aplicação: LLM não chama ferramentas, saída validada por schema e citação garantida por código |
 | [0009](0009-vinculo-telefone-aluno-conta-de-servico.md) | Vínculo telefone → aluno por opt-in e conta de serviço por estúdio com delegação restrita (sem token exchange com impersonation) |
 | [0010](0010-messaging-gateway-e-provedores-de-whatsapp.md) | Messaging-gateway: porta `MessagingProvider`, provedores Cloud API e Whatsmiau escolhidos por estúdio, riscos do Whatsmiau e quando usar cada um |
 | [0011](0011-media-processor.md) | Media-processor: valida, guarda no S3, miniatura, transcrição e evento `MediaProcessed` |
 | [0012](0012-api-gateway-kong.md) | API Gateway com Kong DB-less: webhooks sem JWT, painel com JWT, rate limit |
+| [0014](0014-outbox-e-exclusao-mutua-por-contato.md) | Caixa de saída no Redis (conversa e saídas gravadas juntas, relay e varredor) e lock por contato |
 | [0013](0013-login-do-painel-oidc.md) | Login do painel por OIDC (Keycloak, PKCE), estúdio e papel vindos do token, validação no gateway e no booking-agent |

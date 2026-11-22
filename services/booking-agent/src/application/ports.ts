@@ -87,8 +87,43 @@ export class ConcurrentModification extends Error {
 
 export interface ConversationRepository {
   load(tenantId: string, contactId: string): Promise<Conversation | null>;
-  /** Salva se a versão persistida ainda for a que foi carregada; senão lança ConcurrentModification. */
-  save(conversation: Conversation): Promise<void>;
+  /**
+   * Salva se a versão persistida ainda for a que foi carregada; senão lança ConcurrentModification.
+   * Com `outbox`, a conversa e as saídas são gravadas na mesma operação atômica: ou as duas, ou nenhuma.
+   */
+  save(conversation: Conversation, outbox?: OutboxEntry): Promise<void>;
+}
+
+/** As saídas de um turno, gravadas junto com a conversa e publicadas depois (padrão outbox, ADR 0014). */
+export interface OutboxEntry {
+  readonly id: string;
+  readonly correlationId: string;
+  readonly messages: readonly OutboundMessage[];
+}
+
+export interface Outbox {
+  /** Entradas ainda não publicadas, a mais antiga primeiro. */
+  pending(limit: number): Promise<readonly OutboxEntry[]>;
+  /**
+   * Reserva a entrada por `leaseSeconds` e a devolve, numa operação só: null se outra instância (ou outra
+   * tentativa) já a reservou **ou se ela já foi concluída**. Quem leu a lista de pendentes antes de a entrada ser
+   * concluída não pode publicá-la de novo, por isso a existência é conferida junto com a reserva.
+   */
+  claim(entryId: string, leaseSeconds: number): Promise<OutboxEntry | null>;
+  /** Publicada: tira da caixa de saída. */
+  complete(entryId: string): Promise<void>;
+}
+
+export class ContactBusy extends Error {
+  constructor() {
+    super('Outra mensagem do mesmo contato ainda está em processamento.');
+    this.name = 'ContactBusy';
+  }
+}
+
+/** Exclusão mútua por contato: duas mensagens do mesmo aluno não rodam o agente ao mesmo tempo. */
+export interface ContactLock {
+  withLock<T>(tenantId: string, contactId: string, work: () => Promise<T>): Promise<T>;
 }
 
 export interface HandoffTicket {

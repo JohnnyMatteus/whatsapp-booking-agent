@@ -13,6 +13,7 @@ FROM node:22.21.1-alpine3.22
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/services/booking-agent/dist ./dist
-USER node
+# UID numérico: o kubelet recusa runAsNonRoot com usuário só por nome. 1000 é o usuário node da imagem.
+USER 1000:1000
 EXPOSE 8081
 CMD ["node", "--enable-source-maps", "dist/main.js"]

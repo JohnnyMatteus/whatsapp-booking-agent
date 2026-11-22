@@ -8,7 +8,7 @@ import { context, propagation } from '@opentelemetry/api';
 import { EXCHANGE, parseEnvelope, type AnyEnvelope } from '@wba/contracts';
 import { deadLetterQueueOf, retryQueueOf, type QueueSpec } from '@wba/contracts/topology';
 import amqp, { type ChannelModel, type ConfirmChannel, type ConsumeMessage } from 'amqplib';
-import { decideOnFailure } from './failure-policy.js';
+import { decideOnFailure, DEFAULT_MAX_DEFER_MS } from './failure-policy.js';
 
 export interface BusLogger {
   info(obj: object, msg: string): void;
@@ -20,6 +20,8 @@ export interface ConsumeOptions {
   readonly prefetch: number;
   readonly maxAttempts: number;
   readonly retryDelayMs: number;
+  /** Idade máxima de uma mensagem adiada por ocupação (`Deferred`) antes de ir para a DLQ. */
+  readonly maxDeferMs?: number;
 }
 
 export type EnvelopeHandler = (envelope: AnyEnvelope) => Promise<void>;
@@ -29,6 +31,7 @@ export interface BusObserver {
 }
 
 const ATTEMPT_HEADER = 'x-attempt';
+const DEFERRED_SINCE_HEADER = 'x-deferred-since';
 
 export class RabbitMqBus {
   private constructor(
@@ -106,11 +109,17 @@ export class RabbitMqBus {
       this.channel.ack(message);
       this.observer?.consumed(queue, 'ack');
     } catch (error) {
-      const decision = decideOnFailure(error, attempt, options.maxAttempts);
+      const deferredSince = Number(message.properties.headers?.[DEFERRED_SINCE_HEADER] ?? Number.NaN);
+      const decision = decideOnFailure(error, attempt, options.maxAttempts, {
+        now: Date.now(),
+        deferredSince: Number.isFinite(deferredSince) ? deferredSince : undefined,
+        maxDeferMs: options.maxDeferMs ?? DEFAULT_MAX_DEFER_MS,
+      });
       const target = decision.action === 'retry' ? retryQueueOf(queue) : deadLetterQueueOf(queue);
       const headers = {
         ...message.properties.headers,
         [ATTEMPT_HEADER]: decision.action === 'retry' ? decision.nextAttempt : attempt,
+        ...(decision.action === 'retry' && decision.deferredSince !== undefined ? { [DEFERRED_SINCE_HEADER]: decision.deferredSince } : {}),
         ...(decision.action === 'dead_letter' ? { 'x-failure-reason': decision.reason, 'x-error': describe(error) } : {}),
       };
       try {

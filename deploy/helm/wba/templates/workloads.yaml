@@ -1,0 +1,93 @@
+{{- $root := . }}
+{{- $_ := required "defina secretName (Secret existente com os segredos; o chart não os cria)" .Values.secretName }}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    {{- include "wba.labels" $root | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        wba/exposure: {{ ternary "public" "internal" (default false $svc.public) }}
+        {{- include "wba.labels" $root | nindent 8 }}
+      annotations:
+        # Mudou a configuração ou o segredo referenciado: reinicia os pods.
+        checksum/config: {{ toJson $root.Values.config | sha256sum }}
+    spec:
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.image.registry }}/{{ $svc.image }}:{{ $root.Values.image.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          {{- with $svc.command }}
+          command: {{ toJson . }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          envFrom:
+            - configMapRef:
+                name: wba-config
+            - secretRef:
+                name: {{ $root.Values.secretName }}
+          {{- with $svc.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            {{- toYaml $svc.probe | nindent 12 }}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            {{- toYaml $svc.probe | nindent 12 }}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml $root.Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $root.Values.containerSecurityContext | nindent 12 }}
+            runAsUser: {{ include "wba.uid" (dict "name" $name "uid" $svc.uid) }}
+            runAsGroup: {{ include "wba.uid" (dict "name" $name "uid" $svc.uid) }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            {{- range $index, $path := $svc.writablePaths }}
+            - { name: writable-{{ $index }}, mountPath: {{ $path }} }
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- range $index, $path := $svc.writablePaths }}
+        - name: writable-{{ $index }}
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    {{- include "wba.labels" $root | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- end }}
+{{- end }}

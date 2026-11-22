@@ -1,5 +1,5 @@
 // Métricas do booking-agent (Prometheus).
-import { Counter, Histogram, type Registry } from '@wba/observability';
+import { Counter, Gauge, Histogram, type Registry } from '@wba/observability';
 import type { AgentObserver } from './agent/graph.js';
 
 export function createAgentMetrics(registry: Registry) {
@@ -45,12 +45,23 @@ export function createAgentMetrics(registry: Registry) {
     registers: [registry],
   });
 
+  const outboxPending = new Gauge({
+    name: 'wba_outbox_pending',
+    help: 'Entradas da caixa de saída ainda não publicadas (até o limite de uma varredura). Acima de zero por muito tempo: broker fora ou publicação falhando.',
+    registers: [registry],
+  });
+  const outboxPublished = new Counter({
+    name: 'wba_outbox_swept_total',
+    help: 'Entradas publicadas pelo varredor da caixa de saída (as que o turno não conseguiu publicar na hora).',
+    registers: [registry],
+  });
+
   const observer: AgentObserver = {
     turnFinished: ({ citationViolations: violations }) => citationViolations.inc(violations),
     llmRejected: (stage) => llmRejections.inc({ stage }),
   };
 
-  return { turns, handoffs, turnDuration, consumed, deliveryStatus, observer };
+  return { turns, handoffs, turnDuration, consumed, deliveryStatus, outboxPending, outboxPublished, observer };
 }
 
 export type AgentMetrics = ReturnType<typeof createAgentMetrics>;
