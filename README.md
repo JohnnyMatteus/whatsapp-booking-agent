@@ -154,7 +154,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 3. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
 4. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
 5. Testes de mutação no domínio e de carga no webhook no CI.
-6. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); mapeamento de JIDs `@lid`.
+6. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
 7. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
 8. Deploy com Helm atrás do `platform-edge`.
 

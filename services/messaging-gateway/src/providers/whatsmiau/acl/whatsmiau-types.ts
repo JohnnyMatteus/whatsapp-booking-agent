@@ -15,7 +15,9 @@ export type WebhookEnvelope = z.infer<typeof WebhookEnvelope>;
 
 export const WookKey = z.object({
   remoteJid: z.string().min(1),
+  /** LID do chat. Com `addressingMode: "lid"`, `remoteJid` já é o número quando o Whatsmiau o resolveu. */
   remoteLid: z.string().optional(),
+  addressingMode: z.string().optional(),
   fromMe: z.boolean().optional(),
   id: z.string().min(1),
   participant: z.string().optional(),

@@ -343,7 +343,7 @@ O que já saiu do plano (vínculo do aluno, caixa de entrada humana, avisos por 
 1. **Outbox** no booking-agent para publicar e salvar atomicamente, e **serialização por contato** (single active consumer ou hash por contato) para eliminar a corrida resolvida hoje por compare-and-set e retry.
 2. **Templates aprovados na Meta**: o código já envia `lembrete_aula` e `vaga_liberada`; falta criá-los e aprová-los na conta Business (depende do autor).
 3. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`; depende de credencial).
-4. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e tratar JIDs `@lid`.
+4. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e decidir o LID não resolvido (o resolvido já funciona; falta confirmar se o envio aceita LID).
 5. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
 6. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
 7. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
