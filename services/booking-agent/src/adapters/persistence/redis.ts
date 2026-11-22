@@ -259,6 +259,15 @@ export class RedisMediaNotes implements MediaNotes {
   }
 }
 
+// Reserva e leitura numa execução só: a entrada concluída (removida do hash) nunca é devolvida, mesmo para
+// quem a viu na lista de pendentes um instante antes.
+const CLAIM_IF_PENDING = `
+local entry = redis.call('HGET', KEYS[1], ARGV[1])
+if not entry then return false end
+if redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[2]) then return entry end
+return false
+`;
+
 /**
  * Caixa de saída no Redis: um hash de entradas (com prazo por campo) e um sorted set só de ids pela hora de
  * entrada. A gravação acontece em `RedisConversationRepository.save`, no mesmo script Lua da conversa.
@@ -278,8 +287,9 @@ export class RedisOutbox implements Outbox {
     return raw.flatMap((item) => (item ? [JSON.parse(item) as OutboxEntry] : []));
   }
 
-  async claim(entryId: string, leaseSeconds: number): Promise<boolean> {
-    return (await this.redis.set(this.leasePrefix + entryId, '1', 'EX', leaseSeconds, 'NX')) === 'OK';
+  async claim(entryId: string, leaseSeconds: number): Promise<OutboxEntry | null> {
+    const raw = await this.redis.eval(CLAIM_IF_PENDING, 2, OUTBOX_ENTRIES_KEY, this.leasePrefix + entryId, entryId, leaseSeconds);
+    return typeof raw === 'string' ? (JSON.parse(raw) as OutboxEntry) : null;
   }
 
   async complete(entryId: string): Promise<void> {

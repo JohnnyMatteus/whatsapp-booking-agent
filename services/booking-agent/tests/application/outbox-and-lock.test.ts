@@ -49,6 +49,49 @@ describe('OutboxRelay', () => {
     expect(outbox.entries.size).toBe(0);
   });
 
+  it('entrada concluída durante a varredura não é publicada de novo (publicador lento, turno entregando a última)', async () => {
+    const outbox = new InMemoryOutbox();
+    const published: string[] = [];
+    const slow: OutboundPublisher = {
+      async publish(_messages, correlationId) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        published.push(correlationId);
+      },
+    };
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    for (const id of ids) outbox.add(entry(id));
+    const sweeper = new OutboxRelay({ outbox, publisher: slow });
+    const turn = new OutboxRelay({ outbox, publisher: slow });
+
+    // O varredor leu as 10 pendentes e está publicando as primeiras; o turno entrega a última e a conclui.
+    const sweeping = sweeper.sweep();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await turn.deliver(entry('j'));
+    await sweeping;
+
+    expect([...published].sort()).toEqual(ids.map((id) => `wamid.${id}`));
+    expect(outbox.entries.size).toBe(0);
+  });
+
+  it('varreduras sobrepostas no mesmo processo (setInterval) esperam a primeira e não repetem nada', async () => {
+    const outbox = new InMemoryOutbox();
+    const published: string[] = [];
+    const slow: OutboundPublisher = {
+      async publish(_messages, correlationId) {
+        await new Promise((resolve) => setTimeout(resolve, 3));
+        published.push(correlationId);
+      },
+    };
+    for (const id of ['a', 'b', 'c']) outbox.add(entry(id));
+    const relay = new OutboxRelay({ outbox, publisher: slow });
+
+    const results = await Promise.all([relay.sweep(), relay.sweep(), relay.sweep()]);
+
+    expect(results).toEqual([3, 3, 3]);
+    expect([...published].sort()).toEqual(['wamid.a', 'wamid.b', 'wamid.c']);
+    expect(await relay.sweep()).toBe(0);
+  });
+
   it('duas instâncias varrendo ao mesmo tempo não publicam a mesma entrada duas vezes', async () => {
     const outbox = new InMemoryOutbox();
     const publisher = new Publisher();

@@ -2,6 +2,7 @@
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { OutboxRelay } from '../../src/application/outbox-relay.js';
 import { OUTBOX_ENTRIES_KEY, OUTBOX_ENTRY_TTL_SECONDS, READ_MODEL_TTL_SECONDS, RedisContactLock, RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMediaNotes, RedisOutbox } from '../../src/adapters/persistence/redis.js';
 import { ConcurrentModification, ContactBusy, type OutboxEntry } from '../../src/application/ports.js';
 import { Conversation } from '../../src/domain/conversation.js';
@@ -119,6 +120,33 @@ describe('Redis', () => {
     await outbox.complete('entrada-a');
     expect((await outbox.pending(100)).map((e) => e.id)).not.toContain('entrada-a');
     expect(await outbox.claim('entrada-a', 30)).toBe(true);
+  });
+
+  it('outbox no Redis: entrada concluída durante a varredura não é republicada, com varredores e turno concorrentes', async () => {
+    const repo = new RedisConversationRepository(redis);
+    const outbox = new RedisOutbox(redis);
+    const ids = Array.from({ length: 10 }, (_, i) => `conc-${String(i)}`);
+    for (const [i, id] of ids.entries()) {
+      const conversation = Conversation.start({ tenantId: 'estudio-conc', contactId: `55119000004${String(i).padStart(2, '0')}` });
+      await repo.save(conversation, { id, correlationId: `wamid.${id}`, messages: [{ kind: 'reply', member: { tenantId: 'estudio-conc', contactId: conversation.contactId }, reply: { kind: 'text', text: 'oi' } }] });
+    }
+    const published: string[] = [];
+    const slow = {
+      async publish(_messages: unknown, correlationId: string) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        published.push(correlationId);
+      },
+    };
+    const relays = [new OutboxRelay({ outbox, publisher: slow }), new OutboxRelay({ outbox: new RedisOutbox(redis), publisher: slow })];
+
+    const sweeps = relays.map((relay) => relay.sweep());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await relays[0]!.deliver({ id: ids.at(-1)! });
+    await Promise.all(sweeps);
+
+    expect(published.filter((id) => id.startsWith('wamid.conc-')).sort()).toEqual(ids.map((id) => `wamid.${id}`).sort());
+    expect(await outbox.claim('conc-0', 30)).toBeNull();
+    expect((await outbox.pending(100)).filter((e) => e.id.startsWith('conc-'))).toEqual([]);
   });
 
   it('lock por contato entre duas instâncias: uma de cada vez, e ContactBusy se a espera acaba', async () => {

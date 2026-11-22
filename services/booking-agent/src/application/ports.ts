@@ -104,8 +104,12 @@ export interface OutboxEntry {
 export interface Outbox {
   /** Entradas ainda não publicadas, a mais antiga primeiro. */
   pending(limit: number): Promise<readonly OutboxEntry[]>;
-  /** Reserva a entrada por `leaseSeconds`; false se outra instância (ou outra tentativa) já a reservou. */
-  claim(entryId: string, leaseSeconds: number): Promise<boolean>;
+  /**
+   * Reserva a entrada por `leaseSeconds` e a devolve, numa operação só: null se outra instância (ou outra
+   * tentativa) já a reservou **ou se ela já foi concluída**. Quem leu a lista de pendentes antes de a entrada ser
+   * concluída não pode publicá-la de novo, por isso a existência é conferida junto com a reserva.
+   */
+  claim(entryId: string, leaseSeconds: number): Promise<OutboxEntry | null>;
   /** Publicada: tira da caixa de saída. */
   complete(entryId: string): Promise<void>;
 }

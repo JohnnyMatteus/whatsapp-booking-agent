@@ -31,10 +31,11 @@ export class InMemoryOutbox implements Outbox {
     return [...this.entries.values()].slice(0, limit);
   }
 
-  async claim(entryId: string): Promise<boolean> {
-    if (this.leases.has(entryId)) return false;
+  async claim(entryId: string): Promise<OutboxEntry | null> {
+    const entry = this.entries.get(entryId);
+    if (!entry || this.leases.has(entryId)) return null;
     this.leases.add(entryId);
-    return true;
+    return entry;
   }
 
   /** Para os testes: vence a reserva (o prazo do lease no Redis). */
