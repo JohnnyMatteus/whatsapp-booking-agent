@@ -323,7 +323,15 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-wba-admin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
       TRANSCRIBER: ${TRANSCRIBER:-fake}
+      # Métricas Prometheus (e a prova de vida) nesta porta.
+      PORT: "8083"
     networks: [booking-net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/metrics', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       rabbitmq:
         condition: service_healthy

@@ -22,8 +22,10 @@ O `transcription-worker` só transcrevia áudio e baixava a mídia direto da Clo
 
 - Mídia nova (documento, vídeo) entra por `kind` e uma regra em `ALLOWED_MIME_PREFIXES`, sem tocar nos provedores.
 - O processamento é independente do atendimento: uma rajada de áudios não atrasa o agente.
-- Nada consome `media.processed` ainda; é o ponto de extensão para o painel mostrar miniaturas.
-- O laço de consumo continua mínimo (nack com requeue): retry com TTL e DLQ iguais aos serviços Node seguem em Próximos passos.
+- Nada consome `media.processed` ainda; é o ponto de extensão para o painel mostrar miniaturas (próximo passo).
+- O consumo segue a topologia do ADR 0006: falha transitória (gateway 5xx, S3, broker) vai para `media-processor.media.retry` (TTL) e volta, até `CONSUMER_MAX_ATTEMPTS`; depois, ou direto se o corpo estiver fora do contrato, vai para `media-processor.media.dlq` com o motivo e só o tipo do erro nos headers. O reencaminhamento acontece antes do ack. A decisão está em `retry_policy.py` e `consumer.py`, testadas sem broker; o declare da fila repete os argumentos do `@wba/messaging` (senão o RabbitMQ recusa a redeclaração).
+- Métricas Prometheus na porta 8083 (`wba_queue_messages_total`, que alimenta o alerta de DLQ, `wba_media_processed_total`, `wba_media_processing_seconds`), também usada como healthcheck.
+- Publicações parciais: se o `message_received` falhar depois do `media.processed`, o retry republica os dois; o agente deduplica pelo `messageId`, e o `media.processed` não tem consumidor ainda.
 
 ## Alternativas
 

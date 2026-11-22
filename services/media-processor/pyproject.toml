@@ -11,7 +11,7 @@ dependencies = []
 runtime = ["aio-pika>=9.5,<10", "boto3>=1.40,<2", "httpx>=0.28,<1", "pillow>=11,<13", "prometheus-client>=0.23,<1"]
 # Modelo local de transcrição (pesado: fica fora do CI de testes unitários).
 whisper = ["faster-whisper>=1.2,<2"]
-dev = ["pytest>=8.4,<9", "ruff>=0.14,<1", "mypy>=1.18,<2", "pillow>=11,<13", "httpx>=0.28,<1"]
+dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.0,<2", "prometheus-client>=0.23,<1", "ruff>=0.14,<1", "mypy>=1.18,<2", "pillow>=11,<13", "httpx>=0.28,<1"]
 
 [build-system]
 requires = ["setuptools>=80"]
@@ -22,6 +22,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 pythonpath = ["src"]
 
 [tool.ruff]
@@ -34,4 +35,4 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src/media_processor/domain.py", "src/media_processor/ports.py", "src/media_processor/service.py", "src/media_processor/contracts.py", "src/media_processor/adapters/pillow_thumbnail.py", "src/media_processor/adapters/gateway_media.py"]
+files = ["src/media_processor/domain.py", "src/media_processor/ports.py", "src/media_processor/service.py", "src/media_processor/contracts.py", "src/media_processor/adapters/pillow_thumbnail.py", "src/media_processor/adapters/gateway_media.py", "src/media_processor/retry_policy.py", "src/media_processor/topology.py", "src/media_processor/consumer.py"]
