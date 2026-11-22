@@ -207,3 +207,25 @@ describe('consumidor com lock por contato', () => {
     expect(peak).toBe(1);
   });
 });
+
+describe('contato ocupado no consumidor', () => {
+  it('vira Deferred (retry sem gastar tentativa), não uma falha comum', async () => {
+    const { Deferred } = await import('@wba/messaging');
+    const handle = createInboundHandler({
+      useCase: { execute: vi.fn() } as never,
+      metrics: {} as never,
+      recorder: {} as never,
+      mediaNotes: new InMemoryMediaNotes(),
+      locks: { withLock: () => Promise.reject(new ContactBusy()) },
+      logger: createLogger('test'),
+      tracer: {} as never,
+    });
+    const envelope = createEnvelope(
+      MessageType.MessageReceived,
+      { tenantId: 'estudio-lotus', contactId: '5511900000001', messageId: 'wamid.1', receivedAt: NOW.toISOString(), content: { kind: 'text', text: 'oi', transcribed: false } },
+      { id: 'e-1', correlationId: 'wamid.1', occurredAt: NOW },
+    );
+
+    await expect(handle(envelope)).rejects.toBeInstanceOf(Deferred);
+  });
+});

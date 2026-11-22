@@ -109,7 +109,7 @@ make test             # unitários e de contrato, sem Docker e sem LLM real
 make test-integration # Redis e RabbitMQ reais via testcontainers (roda no CI)
 # o CI também valida o Kong (kong config parse + smoke) e o compose com todos os profiles, e o job e2e sobe o profile core
 # (Keycloak e Kong reais) e roda scripts/e2e.sh (webhook assinado até a resposta no mock da Cloud API, idempotência, painel
-# autenticado, isolamento entre estúdios) e a carga no webhook com k6 (infra/load/webhook.js, 100 req/s por 20 s)
+# autenticado, isolamento entre estúdios) e a carga no webhook com k6 (infra/load/webhook.js: 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens do mesmo contato; o job confere que a fila do agente esvazia e a DLQ termina vazia)
 ```
 
 O que vale olhar:

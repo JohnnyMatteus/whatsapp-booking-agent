@@ -22,6 +22,7 @@ const Env = z.object({
   REMINDER_INTERVAL_MS: z.coerce.number().int().min(1000).default(300_000),
   CONTACT_LOCK_WAIT_MS: z.coerce.number().int().min(0).default(15_000),
   OUTBOX_SWEEP_INTERVAL_MS: z.coerce.number().int().min(500).default(5000),
+  CONSUMER_MAX_DEFER_MS: z.coerce.number().int().min(1000).default(600_000),
   CONSUMER_PREFETCH: z.coerce.number().int().min(1).default(5),
   CONSUMER_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(4),
   CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().min(100).default(3000),

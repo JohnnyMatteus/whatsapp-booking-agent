@@ -64,7 +64,7 @@ const onOutboxError = (error: unknown) => logger.warn({ error: error instanceof 
 const useCase = new HandleInboundMessage({ conversations, agent, publisher, outbox, onPublishError: onOutboxError, handoffs, log, metrics: recorder, clock });
 await bus.consume(
   Queues.bookingAgent,
-  { prefetch: config.CONSUMER_PREFETCH, maxAttempts: config.CONSUMER_MAX_ATTEMPTS, retryDelayMs: config.CONSUMER_RETRY_DELAY_MS },
+  { prefetch: config.CONSUMER_PREFETCH, maxAttempts: config.CONSUMER_MAX_ATTEMPTS, retryDelayMs: config.CONSUMER_RETRY_DELAY_MS, maxDeferMs: config.CONSUMER_MAX_DEFER_MS },
   createInboundHandler({ useCase, metrics, recorder, mediaNotes, locks: new RedisContactLock(redis, { waitMs: config.CONTACT_LOCK_WAIT_MS }), logger, tracer: tracing.tracer }),
 );
 // A fila de atendimento existe mesmo sem consumidor dedicado: as mensagens ficam guardadas.

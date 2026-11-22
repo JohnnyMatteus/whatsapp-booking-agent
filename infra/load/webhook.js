@@ -1,4 +1,4 @@
-// Carga no webhook de entrada (k6): mensagens assinadas como a Meta assinaria, ids distintos, direto no
+// Carga no webhook de entrada (k6): mensagens assinadas como a Meta assinaria, ids e contatos distintos, direto no
 // messaging-webhook pela rede do compose (o api-gateway limita a 600 por minuto por IP e não é o alvo aqui).
 // Dentro do compose: docker run --rm --network whatsapp-booking-net -v "$PWD/infra/load:/scripts:ro" \
 //   grafana/k6:1.0.0 run /scripts/webhook.js
@@ -11,7 +11,10 @@ const SECRET = __ENV.WHATSAPP_APP_SECRET || 'dev-only-change-me-app-secret';
 
 export const options = {
   scenarios: {
-    mensagens: { executor: 'constant-arrival-rate', rate: 100, timeUnit: '1s', duration: '20s', preAllocatedVUs: 50, maxVUs: 200 },
+    // Muitos alunos, cada mensagem de um contato diferente: capacidade do webhook e do agente.
+    mensagens: { executor: 'constant-arrival-rate', rate: 50, timeUnit: '1s', duration: '20s', preAllocatedVUs: 50, maxVUs: 200, exec: 'muitosContatos' },
+    // Rajada de um aluno só: o lock por contato adia as mensagens sem gastar tentativa nem ir para a DLQ.
+    rajada: { executor: 'shared-iterations', vus: 20, iterations: 20, maxDuration: '30s', exec: 'mesmoContato' },
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
@@ -20,8 +23,18 @@ export const options = {
   },
 };
 
-export default function () {
-  const id = `wamid.LOAD${__VU}-${__ITER}-${Date.now()}`;
+const pad = (value, width) => String(value).padStart(width, '0');
+
+export function muitosContatos() {
+  send(`5511${pad(__VU, 3)}${pad(__ITER, 5)}`);
+}
+
+export function mesmoContato() {
+  send('5511999990000');
+}
+
+function send(contact) {
+  const id = `wamid.LOAD${contact}-${__VU}-${__ITER}-${Date.now()}`;
   const body = JSON.stringify({
     object: 'whatsapp_business_account',
     entry: [
@@ -33,8 +46,8 @@ export default function () {
             value: {
               messaging_product: 'whatsapp',
               metadata: { display_phone_number: '15550000001', phone_number_id: '100000000000001' },
-              contacts: [{ profile: { name: 'Aluna Exemplo' }, wa_id: '5511900000001' }],
-              messages: [{ from: '5511900000001', id, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'oi' } }],
+              contacts: [{ profile: { name: 'Aluna Exemplo' }, wa_id: contact }],
+              messages: [{ from: contact, id, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'oi' } }],
             },
           },
         ],

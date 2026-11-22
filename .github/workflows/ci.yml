@@ -289,16 +289,32 @@ jobs:
         run: |
           set -o pipefail
           scripts/e2e.sh 2>&1 | tee "$RUNNER_TEMP/e2e.log"
-      - name: Carga no webhook (k6, 100 req/s por 20 s)
+      - name: Carga no webhook (k6: 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens de um contato)
         run: |
           set -o pipefail
           docker run --rm --network whatsapp-booking-net -v "$PWD/infra/load:/scripts:ro" grafana/k6:1.0.0 run /scripts/webhook.js 2>&1 | tee "$RUNNER_TEMP/k6.log"
+      - name: A fila do agente esvazia e a DLQ termina vazia (ocupação de contato não é falha)
+        run: |
+          set -o pipefail
+          {
+            api() { curl -fsS -u wba:dev-only-change-me "http://127.0.0.1:15672/api/queues/%2F/$1" | python3 -c 'import json,sys; q=json.load(sys.stdin); print(q["messages"])'; }
+            for _ in $(seq 1 90); do
+              pending="$(api booking-agent.inbound)"; retry="$(api booking-agent.inbound.retry)"
+              [ "$pending" = 0 ] && [ "$retry" = 0 ] && break
+              sleep 2
+            done
+            echo "pendentes=$pending em retry=$retry"
+            [ "$pending" = 0 ] && [ "$retry" = 0 ] || { echo "FALHA a fila do agente não esvaziou"; exit 1; }
+            dlq="$(api booking-agent.inbound.dlq)"
+            echo "DLQ do booking-agent: $dlq"
+            [ "$dlq" = 0 ] || { echo "FALHA a DLQ do booking-agent não está vazia"; exit 1; }
+          } 2>&1 | tee "$RUNNER_TEMP/dlq.log"
       - name: Logs dos serviços quando algo falhou
         if: failure()
         run: docker compose --profile core logs --no-color --tail=200
       - name: Diagnóstico dos passos que falharam
         if: failure()
-        run: python3 scripts/ci-annotate.py e2e "$RUNNER_TEMP/e2e.log" "$RUNNER_TEMP/k6.log"
+        run: python3 scripts/ci-annotate.py e2e "$RUNNER_TEMP/e2e.log" "$RUNNER_TEMP/k6.log" "$RUNNER_TEMP/dlq.log"
       - name: Derruba o ambiente
         if: always()
         run: docker compose --profile core down -v --remove-orphans
