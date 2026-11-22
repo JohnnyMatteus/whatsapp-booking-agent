@@ -249,7 +249,7 @@ jobs:
         run: |
           set -o pipefail
           {
-            docker compose --profile core --profile observability --profile llm --profile tools --profile whatsmiau config -q
+            docker compose --profile core --profile observability --profile llm --profile whatsmiau config -q
             docker compose -f docker-compose.yml -f docker-compose.portfolio.yml --profile core config -q
           } 2>&1 | tee "$RUNNER_TEMP/compose.log"
       - name: promtool valida configuração e alertas
@@ -266,7 +266,7 @@ jobs:
       - name: ShellCheck
         run: |
           set -o pipefail
-          shellcheck scripts/*.sh infra/minio/*.sh infra/gateway/*.sh 2>&1 | tee "$RUNNER_TEMP/shellcheck.log"
+          shellcheck scripts/*.sh infra/localstack/*.sh infra/gateway/*.sh 2>&1 | tee "$RUNNER_TEMP/shellcheck.log"
       - name: Diagnóstico dos passos que falharam
         if: failure()
         run: python3 scripts/ci-annotate.py infraestrutura "$RUNNER_TEMP/compose.log" "$RUNNER_TEMP/promtool.log" "$RUNNER_TEMP/wiremock.log" "$RUNNER_TEMP/shellcheck.log"

@@ -7,7 +7,7 @@ license = "MIT"
 dependencies = []
 
 [project.optional-dependencies]
-# Adaptadores de produção: fila, armazenamento S3/MinIO, download pelo gateway e miniatura.
+# Adaptadores de produção: fila, armazenamento S3, download pelo gateway e miniatura.
 runtime = ["aio-pika>=9.5,<10", "boto3>=1.40,<2", "httpx>=0.28,<1", "pillow>=11,<13", "prometheus-client>=0.23,<1"]
 # Modelo local de transcrição (pesado: fica fora do CI de testes unitários).
 whisper = ["faster-whisper>=1.2,<2"]

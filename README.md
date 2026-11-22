@@ -44,7 +44,7 @@ flowchart LR
   webhook <--> redis[(Redis)]
   mq -- inbound.media_received --> media[media-processor · Python<br/>valida · miniatura · transcreve]
   media -- bytes da mídia, API interna --> webhook
-  media --> s3[(MinIO/S3)]
+  media --> s3[(S3 · LocalStack)]
   media -- message_received · media.processed --> mq
   mq --> agent[booking-agent · TS<br/>domínio de Agendamento<br/>agente LangGraph]
   agent <--> redis
@@ -76,7 +76,7 @@ Pré-requisitos: Docker 27+, Node 22+ com pnpm 12, Go 1.26+, Python 3.12+.
 ```bash
 cp .env.example .env
 make install          # dependências locais (pnpm, Go e venv do media-processor)
-make up               # serviços, RabbitMQ, Redis, MinIO, mocks da Cloud API e do SaaS, observabilidade
+make up               # serviços, RabbitMQ, Redis, S3 local (LocalStack), mocks da Cloud API e do SaaS, observabilidade
 make up-llm           # opcional: Ollama local e o modelo do LLM_MODEL
 make seed             # envia ao webhook (via api-gateway) uma mensagem assinada como a Meta
 make up-whatsmiau     # opcional: estudio-sol atendido pelo Whatsmiau (mock) e estudio-lotus na Cloud API
@@ -133,7 +133,7 @@ O CI ([`ci.yml`](.github/workflows/ci.yml)) roda um job por serviço, mais os te
 | [0004](docs/adr/0004-transferencia-para-humano.md) | Transferência por pedido, tema sensível ou 2 falhas seguidas; o bot silencia |
 | [0005](docs/adr/0005-idempotencia.md) | Idempotência pelo id da mensagem no webhook e na Conversa |
 | [0006](docs/adr/0006-mensageria-rabbitmq.md) | RabbitMQ: exchange topic, filas quorum, retry com TTL e DLQ por consumidor |
-| [0007](docs/adr/0007-infraestrutura-local-e-servicos-emulados.md) | Docker com profiles, WireMock no lugar da Meta e do SaaS, MinIO para áudio |
+| [0007](docs/adr/0007-infraestrutura-local-e-servicos-emulados.md) | Docker com profiles, WireMock no lugar da Meta e do SaaS, LocalStack (S3) para áudio |
 | [0008](docs/adr/0008-agente-langgraph-como-adapter.md) | Agente LangGraph como adapter: o LLM não chama ferramentas, saída por schema com um retry, citação garantida por código |
 | [0009](docs/adr/0009-vinculo-telefone-aluno-conta-de-servico.md) | Vínculo telefone → aluno por opt-in (`vincular 123456`) e conta de serviço por estúdio no Keycloak, sem token exchange com impersonation |
 | [0010](docs/adr/0010-messaging-gateway-e-provedores-de-whatsapp.md) | Messaging-gateway: porta `MessagingProvider`, Cloud API e Whatsmiau por estúdio, riscos do Whatsmiau e quando usar cada um |
@@ -155,7 +155,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 1. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
 2. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
-3. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
+3. Teste de integração do media-processor com RabbitMQ e S3 reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
 4. Testes de mutação no domínio (Stryker): falta adicionar a dependência e o lockfile, o que exige instalar pacotes.
 5. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
 6. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.

@@ -1,9 +1,8 @@
 # Ambiente local do whatsapp-booking-agent (ADR 0007).
-#   core:          api-gateway, Keycloak (login do painel), serviços, RabbitMQ, Redis, MinIO e mocks da Cloud API e do SaaS
+#   core:          api-gateway, Keycloak (login do painel), serviços, RabbitMQ, Redis, S3 local (LocalStack) e mocks da Cloud API e do SaaS
 #   whatsmiau:     mock do Whatsmiau (provedor alternativo, ADR 0010); troque TENANT_CHANNELS para usá-lo
 #   observability: Prometheus, Jaeger e Grafana
 #   llm:           Ollama para o LLM local (opcional; qualquer API compatível com OpenAI serve)
-#   tools:         cliente do MinIO para inspecionar os áudios guardados
 # Senhas e tokens abaixo são só de desenvolvimento (dev-only-*). Valores reais vão no .env.
 
 x-node-service: &node-service
@@ -66,40 +65,27 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
-    image: minio/minio:RELEASE.2025-04-03T14-56-28Z
+  # S3 local (LocalStack, só o serviço s3). O bucket das mídias e o ciclo de vida de 30 dias são criados pelo
+  # script de init quando o LocalStack fica pronto; o healthcheck só passa depois dele.
+  localstack:
+    image: localstack/localstack:4.4.0
     profiles: [core]
-    command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-wba-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
+      SERVICES: s3
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
+      DEBUG: "0"
     ports:
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${LOCALSTACK_PORT:-4566}:4566"
     volumes:
-      - minio-data:/data
+      - ./infra/localstack/init-s3.sh:/etc/localstack/init/ready.d/10-media-bucket.sh:ro
     networks: [booking-net]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Pronto = estágio READY concluído e nenhum script de init em erro (o do bucket entre eles).
+      test: ["CMD-SHELL", "out=$$(curl -fsS http://127.0.0.1:4566/_localstack/init/ready) && echo \"$$out\" | grep -Eq '\"READY\": ?true' && ! echo \"$$out\" | grep -q '\"ERROR\"'"]
       interval: 5s
       timeout: 5s
-      retries: 10
-
-  # Cria o bucket das mídias (idempotente) e termina.
-  minio-init:
-    image: minio/mc:RELEASE.2025-04-03T17-07-56Z
-    profiles: [core]
-    entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-wba-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
-      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
-    volumes:
-      - ./infra/minio/create-bucket.sh:/init/create-bucket.sh:ro
-    networks: [booking-net]
-    depends_on:
-      minio:
-        condition: service_healthy
-    restart: "no"
+      retries: 20
+      start_period: 15s
 
   # Mock da WhatsApp Cloud API (envio de mensagens e download de mídia).
   cloud-api-mock:
@@ -313,7 +299,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # Valida, guarda no MinIO, gera miniatura e transcreve; baixa a mídia pela API interna do
+  # Valida, guarda no S3 (LocalStack), gera miniatura e transcreve; baixa a mídia pela API interna do
   # messaging-gateway e nunca fala com um provedor de WhatsApp (ADR 0011).
   media-processor:
     build: ./services/media-processor
@@ -325,9 +311,11 @@ services:
       GATEWAY_URL: http://messaging-webhook:8080
       MEDIA_API_TOKEN: ${MEDIA_API_TOKEN:-dev-only-media-token}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
-      S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-wba-admin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
+      S3_ENDPOINT_URL: http://localstack:4566
+      # O LocalStack aceita qualquer credencial; na AWS de verdade troque por credenciais reais (ou uma role).
+      AWS_ACCESS_KEY_ID: dev-only-localstack
+      AWS_SECRET_ACCESS_KEY: dev-only-localstack
+      AWS_DEFAULT_REGION: us-east-1
       TRANSCRIBER: ${TRANSCRIBER:-fake}
       # Métricas Prometheus (e a prova de vida) nesta porta.
       PORT: "8083"
@@ -343,8 +331,8 @@ services:
         condition: service_healthy
       messaging-webhook:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      localstack:
+        condition: service_healthy
 
   web:
     build: { context: ., dockerfile: web/Dockerfile }
@@ -431,24 +419,10 @@ services:
       timeout: 3s
       retries: 5
 
-  mc:
-    image: minio/mc:RELEASE.2025-04-03T17-07-56Z
-    profiles: [tools]
-    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null && mc ls --recursive local/$$MEDIA_BUCKET"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-wba-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-only-change-me}
-      MEDIA_BUCKET: ${MEDIA_BUCKET:-wba-media}
-    networks: [booking-net]
-    depends_on:
-      minio:
-        condition: service_healthy
-
 volumes:
   keycloak-data:
   rabbitmq-data:
   redis-data:
-  minio-data:
   ollama-data:
   prometheus-data:
   grafana-data:

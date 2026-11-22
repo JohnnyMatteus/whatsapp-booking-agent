@@ -17,7 +17,7 @@ class MediaSource(Protocol):
 
 
 class MediaStore(Protocol):
-    """Guarda o original e a miniatura (S3, MinIO ou LocalStack, com endpoint configurável)."""
+    """Guarda o original e a miniatura (S3 ou LocalStack, com endpoint configurável)."""
 
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
 

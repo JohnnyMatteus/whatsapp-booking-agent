@@ -74,7 +74,7 @@ flowchart LR
   webhook <--> redis[(Redis)]
   mq -- inbound.media_received --> media[media-processor · Python<br/>valida · miniatura · faster-whisper]
   media -- GET /internal/media --> webhook
-  media -- original e miniatura --> s3[(MinIO / S3)]
+  media -- original e miniatura --> s3[(S3 / LocalStack)]
   media -- inbound.message_received<br/>media.processed --> mq
   mq -- inbound.* --> agent
 
@@ -219,7 +219,7 @@ sequenceDiagram
   participant W as webhook
   participant Q as RabbitMQ
   participant P as media-processor
-  participant S as MinIO/S3
+  participant S as S3
   participant B as booking-agent
   W->>Q: inbound.media_received(kind, mediaId)
   Q->>P: entrega
@@ -350,7 +350,7 @@ O que já saiu do plano (vínculo do aluno, caixa de entrada humana, avisos por 
 1. **Templates aprovados na Meta**: o código já envia `lembrete_aula` e `vaga_liberada`; falta criá-los e aprová-los na conta Business (depende do autor).
 2. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`; depende de credencial).
 3. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e decidir o LID não resolvido (o resolvido já funciona; falta confirmar se o envio aceita LID).
-4. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
+4. **media-processor**: teste de integração com RabbitMQ e S3 reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
 5. **Testes de mutação** no domínio (Stryker): falta a dependência no manifest e no lockfile. O ponta a ponta no compose e a carga no webhook (k6) rodam no job `e2e` do CI.
 6. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
 7. **Deploy**: o chart Helm (`deploy/helm/wba`) só foi validado por `helm lint` e `helm template` no CI; falta instalá-lo num cluster e ligá-lo ao gateway compartilhado e ao GitOps do `platform-edge`.
