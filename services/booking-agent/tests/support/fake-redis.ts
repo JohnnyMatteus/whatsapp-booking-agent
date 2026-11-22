@@ -81,6 +81,30 @@ export class FakeRedis {
     return (this.hashes.delete(key) ? 1 : 0) + (this.lists.delete(key) ? 1 : 0);
   }
 
+  private readonly strings = new Map<string, { value: string; expiresAt: number | null }>();
+
+  /** SET key value PX|EX n [NX]: o suficiente para o lock por contato. */
+  async set(key: string, value: string, unit: 'PX' | 'EX', amount: number, nx?: 'NX'): Promise<'OK' | null> {
+    const current = this.strings.get(key);
+    const live = current && (current.expiresAt === null || current.expiresAt > this.now);
+    if (nx === 'NX' && live) return null;
+    this.strings.set(key, { value, expiresAt: this.now + amount * (unit === 'EX' ? 1000 : 1) });
+    return 'OK';
+  }
+
+  /** Só o script de liberação do lock: apaga a chave se o valor for o do dono. */
+  async eval(_script: string, _keys: number, key: string, token: string): Promise<number> {
+    const current = this.strings.get(key);
+    if (current?.value !== token) return 0;
+    this.strings.delete(key);
+    return 1;
+  }
+
+  hasString(key: string): boolean {
+    const current = this.strings.get(key);
+    return current !== undefined && (current.expiresAt === null || current.expiresAt > this.now);
+  }
+
   /** Só rpush, ltrim e expire encadeados, como o RedisConversationLog usa. */
   multi() {
     const steps: (() => void)[] = [];

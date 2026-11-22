@@ -23,3 +23,8 @@ groups:
         labels: { severity: warn }
         annotations:
           summary: "Mais de 5% dos turnos terminam em transferência por falha (LLM ou agenda instáveis)"
+      - alert: CaixaDeSaidaParada
+        expr: min_over_time(wba_outbox_pending[10m]) > 0
+        labels: { severity: warn }
+        annotations:
+          summary: "Há respostas na caixa de saída do booking-agent que não estão saindo (RabbitMQ fora do ar ou publicação falhando)"

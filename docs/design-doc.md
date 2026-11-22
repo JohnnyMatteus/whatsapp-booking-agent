@@ -278,7 +278,9 @@ O sender consome `whatsapp-sender.replies`. Erro transitório da Cloud API (429,
 | SaaS fora do ar ou 5xx | `saas_indisponivel` retentável → falha do bot com resposta ao aluno |
 | Regra de negócio do SaaS (conflito de horário, prazo de cancelamento) | erro de domínio mapeado → resposta explicando; não conta como falha |
 | 2 falhas seguidas | transferência para humano por `repeated_failure` |
-| Publicar resposta e cair antes de salvar | a reentrega responde de novo (duplicata rara, preferida à perda; outbox é próximo passo) |
+| Cair entre salvar a Conversa e publicar a resposta | a resposta está na caixa de saída (gravada junto com a Conversa); o varredor a publica, e a reentrega da mensagem vira `duplicate` ([ADR 0014](adr/0014-outbox-e-exclusao-mutua-por-contato.md)) |
+| Publicar passar e a baixa na caixa de saída falhar | a entrada sai de novo quando a reserva vence: duplicata rara, a única que sobra |
+| Duas mensagens do mesmo aluno ao mesmo tempo | lock por contato; quem espera além de 15 s volta pela fila de retry (`ContactBusy`); o compare-and-set segue como rede de segurança |
 | Cloud API 429/5xx | retry com TTL até 5 vezes, depois DLQ |
 | Cloud API 4xx definitivo | DLQ direto (`PermanentFailure`) |
 
@@ -345,11 +347,10 @@ Conforme `courses.yaml` (`exercised_by: whatsapp-booking-agent`):
 
 O que já saiu do plano (vínculo do aluno, caixa de entrada humana, avisos por template, media-processor com retry e miniaturas, login do painel) está descrito na seção 2 e nos ADRs 0009, 0011 e 0013. O que falta:
 
-1. **Outbox** no booking-agent para publicar e salvar atomicamente, e **serialização por contato** (single active consumer ou hash por contato) para eliminar a corrida resolvida hoje por compare-and-set e retry.
-2. **Templates aprovados na Meta**: o código já envia `lembrete_aula` e `vaga_liberada`; falta criá-los e aprová-los na conta Business (depende do autor).
-3. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`; depende de credencial).
-4. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e decidir o LID não resolvido (o resolvido já funciona; falta confirmar se o envio aceita LID).
-5. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
-6. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
-7. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
-8. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.
+1. **Templates aprovados na Meta**: o código já envia `lembrete_aula` e `vaga_liberada`; falta criá-los e aprová-los na conta Business (depende do autor).
+2. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`; depende de credencial).
+3. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado e mock) e decidir o LID não resolvido (o resolvido já funciona; falta confirmar se o envio aceita LID).
+4. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
+5. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
+6. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
+7. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.

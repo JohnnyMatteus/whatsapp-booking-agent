@@ -1,7 +1,10 @@
 // Persistência da conversa e da fila de atendimento no Redis.
+import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import {
   ConcurrentModification,
+  ContactBusy,
+  type ContactLock,
   type ConversationLog,
   type ConversationRepository,
   type ConversationSummary,
@@ -12,6 +15,8 @@ import {
   type MetricIncrement,
   type MetricsStore,
   type NoticeLedger,
+  type Outbox,
+  type OutboxEntry,
   type TimelineEntry,
 } from '../../application/ports.js';
 import { Conversation, type ConversationSnapshot } from '../../domain/conversation.js';
@@ -25,6 +30,11 @@ export const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
  */
 export const READ_MODEL_TTL_SECONDS = CONVERSATION_TTL_SECONDS - 60 * 60;
 const SECOND_MS = 1000;
+
+export const OUTBOX_ENTRIES_KEY = 'wba:outbox:entries';
+export const OUTBOX_ORDER_KEY = 'wba:outbox:order';
+/** Saída que ninguém conseguiu publicar em 7 dias é descartada: ela carrega o telefone do aluno. */
+export const OUTBOX_ENTRY_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Hash por estúdio em que cada campo tem o seu prazo (HEXPIRE, Redis 7.4+): a atividade de uma conversa não
@@ -72,6 +82,12 @@ local version = 0
 if current then version = tonumber(cjson.decode(current)['version']) end
 if version ~= tonumber(ARGV[1]) then return 0 end
 redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+if ARGV[4] ~= '' then
+  -- Outbox: as saídas do turno entram na mesma operação atômica que a conversa.
+  redis.call('HSET', KEYS[2], ARGV[4], ARGV[5])
+  redis.call('HEXPIRE', KEYS[2], ARGV[7], 'FIELDS', 1, ARGV[4])
+  redis.call('ZADD', KEYS[3], ARGV[6], ARGV[4])
+end
 return 1
 `;
 
@@ -86,10 +102,23 @@ export class RedisConversationRepository implements ConversationRepository {
     return raw ? Conversation.restore(JSON.parse(raw) as ConversationSnapshot) : null;
   }
 
-  async save(conversation: Conversation): Promise<void> {
+  async save(conversation: Conversation, outbox?: OutboxEntry): Promise<void> {
     const snapshot = conversation.snapshot();
     const next = JSON.stringify({ ...snapshot, version: snapshot.version + 1 });
-    const saved = await this.redis.eval(SAVE_IF_VERSION, 1, this.prefix + snapshot.id, snapshot.version, next, CONVERSATION_TTL_SECONDS);
+    const saved = await this.redis.eval(
+      SAVE_IF_VERSION,
+      3,
+      this.prefix + snapshot.id,
+      OUTBOX_ENTRIES_KEY,
+      OUTBOX_ORDER_KEY,
+      snapshot.version,
+      next,
+      CONVERSATION_TTL_SECONDS,
+      outbox?.id ?? '',
+      outbox ? JSON.stringify(outbox) : '',
+      Date.now(),
+      OUTBOX_ENTRY_TTL_SECONDS,
+    );
     if (saved !== 1) throw new ConcurrentModification(snapshot.id);
   }
 }
@@ -227,5 +256,88 @@ export class RedisMediaNotes implements MediaNotes {
     if (messageIds.length === 0) return new Map();
     const raw = await this.redis.mget(...messageIds.map((id) => this.key(tenantId, id)));
     return new Map(messageIds.flatMap((id, i) => (raw[i] ? [[id, JSON.parse(raw[i]) as MediaNote] as const] : [])));
+  }
+}
+
+/**
+ * Caixa de saída no Redis: um hash de entradas (com prazo por campo) e um sorted set só de ids pela hora de
+ * entrada. A gravação acontece em `RedisConversationRepository.save`, no mesmo script Lua da conversa.
+ */
+export class RedisOutbox implements Outbox {
+  constructor(
+    private readonly redis: Redis,
+    private readonly leasePrefix = 'wba:outbox:lease:',
+  ) {}
+
+  async pending(limit: number): Promise<readonly OutboxEntry[]> {
+    const ids = await this.redis.zrange(OUTBOX_ORDER_KEY, 0, limit - 1);
+    if (ids.length === 0) return [];
+    const raw = await this.redis.hmget(OUTBOX_ENTRIES_KEY, ...ids);
+    const expired = ids.filter((_, i) => !raw[i]);
+    if (expired.length > 0) await this.redis.zrem(OUTBOX_ORDER_KEY, ...expired);
+    return raw.flatMap((item) => (item ? [JSON.parse(item) as OutboxEntry] : []));
+  }
+
+  async claim(entryId: string, leaseSeconds: number): Promise<boolean> {
+    return (await this.redis.set(this.leasePrefix + entryId, '1', 'EX', leaseSeconds, 'NX')) === 'OK';
+  }
+
+  async complete(entryId: string): Promise<void> {
+    await this.redis.multi().hdel(OUTBOX_ENTRIES_KEY, entryId).zrem(OUTBOX_ORDER_KEY, entryId).del(this.leasePrefix + entryId).exec();
+  }
+}
+
+const RELEASE_IF_OWNER = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+return 0
+`;
+
+export interface ContactLockOptions {
+  /** Validade do lock se o dono morrer. Maior que um turno inteiro (LLM e ferramentas). */
+  readonly ttlMs?: number;
+  /** Quanto esperar o dono atual antes de desistir com ContactBusy (a fila reentrega depois). */
+  readonly waitMs?: number;
+  readonly pollMs?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  readonly now?: () => number;
+}
+
+/**
+ * Exclusão mútua por contato entre instâncias (SET NX PX, liberação só pelo dono). É para evitar o trabalho
+ * duplicado do agente, não a segurança: se o lock vencer no meio de um turno, o compare-and-set da conversa
+ * continua impedindo a gravação concorrente.
+ */
+export class RedisContactLock implements ContactLock {
+  private readonly ttlMs: number;
+  private readonly waitMs: number;
+  private readonly pollMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly now: () => number;
+
+  constructor(
+    private readonly redis: Redis,
+    options: ContactLockOptions = {},
+    private readonly prefix = 'wba:lock:',
+  ) {
+    this.ttlMs = options.ttlMs ?? 60_000;
+    this.waitMs = options.waitMs ?? 15_000;
+    this.pollMs = options.pollMs ?? 50;
+    this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.now = options.now ?? Date.now;
+  }
+
+  async withLock<T>(tenantId: string, contactId: string, work: () => Promise<T>): Promise<T> {
+    const key = `${this.prefix}${tenantId}:${contactId}`;
+    const token = randomUUID();
+    const deadline = this.now() + this.waitMs;
+    while ((await this.redis.set(key, token, 'PX', this.ttlMs, 'NX')) !== 'OK') {
+      if (this.now() >= deadline) throw new ContactBusy();
+      await this.sleep(this.pollMs + Math.floor(Math.random() * this.pollMs));
+    }
+    try {
+      return await work();
+    } finally {
+      await this.redis.eval(RELEASE_IF_OWNER, 1, key, token);
+    }
   }
 }

@@ -20,7 +20,7 @@ Os serviços trocam comandos (mensagem recebida, pedido de reserva), respostas a
 
 - O sender trata limite de taxa da Meta com retry sem bloquear a fila; erros definitivos não ficam girando.
 - A decisão de destino (`decideOnFailure`) é função pura testada sem broker; o caminho real (retry até a DLQ) é testado com RabbitMQ em testcontainers no CI.
-- Ordem por contato não é garantida com vários consumidores: a Conversa resolve corrida com compare-and-set e retry. Serializar por contato é próximo passo.
+- Ordem por contato não é garantida com vários consumidores: a Conversa resolve corrida com compare-and-set e retry. O ADR 0014 acrescenta um lock por contato (uma mensagem do aluno por vez, sem garantia de ordem) e a caixa de saída.
 
 ## Alternativas
 

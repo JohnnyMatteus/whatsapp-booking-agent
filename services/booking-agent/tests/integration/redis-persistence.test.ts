@@ -2,8 +2,8 @@
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { READ_MODEL_TTL_SECONDS, RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMediaNotes } from '../../src/adapters/persistence/redis.js';
-import { ConcurrentModification } from '../../src/application/ports.js';
+import { OUTBOX_ENTRIES_KEY, OUTBOX_ENTRY_TTL_SECONDS, READ_MODEL_TTL_SECONDS, RedisContactLock, RedisConversationLog, RedisConversationRepository, RedisHandoffQueue, RedisMediaNotes, RedisOutbox } from '../../src/adapters/persistence/redis.js';
+import { ConcurrentModification, ContactBusy, type OutboxEntry } from '../../src/application/ports.js';
 import { Conversation } from '../../src/domain/conversation.js';
 
 let container: StartedRedisContainer;
@@ -87,6 +87,59 @@ describe('Redis', () => {
     expect((await queue.list('estudio-fila')).map((t) => t.contactId)).toEqual(['5511900000201']);
     const [ttl] = await redis.httl('wba:handoffs:estudio-fila:tickets', 'FIELDS', 1, 'estudio-fila:5511900000201');
     expect(ttl).toBeGreaterThan(READ_MODEL_TTL_SECONDS - 60);
+  });
+
+  it('outbox: conversa e saídas gravadas juntas; conflito de versão não grava saída; claim exclusivo; complete remove', async () => {
+    const repo = new RedisConversationRepository(redis);
+    const outbox = new RedisOutbox(redis);
+    const entry = (id: string): OutboxEntry => ({
+      id,
+      correlationId: `wamid.${id}`,
+      messages: [{ kind: 'reply', member: { tenantId: 'estudio-ob', contactId: '5511900000301' }, reply: { kind: 'text', text: 'oi' } }],
+    });
+    const base = Conversation.start({ tenantId: 'estudio-ob', contactId: '5511900000301' });
+    await repo.save(base);
+    const a = (await repo.load('estudio-ob', '5511900000301'))!;
+    const b = (await repo.load('estudio-ob', '5511900000301'))!;
+    a.receive('wamid.A');
+    b.receive('wamid.B');
+
+    await repo.save(a, entry('entrada-a'));
+    await expect(repo.save(b, entry('entrada-b'))).rejects.toBeInstanceOf(ConcurrentModification);
+
+    const pending = (await outbox.pending(100)).map((e) => e.id);
+    expect(pending).toContain('entrada-a');
+    expect(pending).not.toContain('entrada-b');
+    expect((await repo.load('estudio-ob', '5511900000301'))!.snapshot().processedMessageIds).toEqual(['wamid.A']);
+    const [ttl] = await redis.httl(OUTBOX_ENTRIES_KEY, 'FIELDS', 1, 'entrada-a');
+    expect(ttl).toBeGreaterThan(OUTBOX_ENTRY_TTL_SECONDS - 60);
+
+    expect(await outbox.claim('entrada-a', 30)).toBe(true);
+    expect(await outbox.claim('entrada-a', 30)).toBe(false);
+    await outbox.complete('entrada-a');
+    expect((await outbox.pending(100)).map((e) => e.id)).not.toContain('entrada-a');
+    expect(await outbox.claim('entrada-a', 30)).toBe(true);
+  });
+
+  it('lock por contato entre duas instâncias: uma de cada vez, e ContactBusy se a espera acaba', async () => {
+    const one = new RedisContactLock(redis, { pollMs: 5, waitMs: 3000 });
+    const two = new RedisContactLock(redis, { pollMs: 5, waitMs: 3000 });
+    const events: string[] = [];
+    const work = (name: string) => async () => {
+      events.push(`${name}:início`);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      events.push(`${name}:fim`);
+    };
+
+    await Promise.all([one.withLock('estudio-lk', 'c1', work('a')), two.withLock('estudio-lk', 'c1', work('b'))]);
+    expect(events[1]).toMatch(/:fim$/);
+    expect(events[0]!.slice(0, 1)).toBe(events[1]!.slice(0, 1));
+
+    const impatient = new RedisContactLock(redis, { pollMs: 5, waitMs: 20 });
+    await one.withLock('estudio-lk', 'c2', async () => {
+      await expect(impatient.withLock('estudio-lk', 'c2', async () => 'nunca')).rejects.toBeInstanceOf(ContactBusy);
+    });
+    expect(await redis.exists('wba:lock:estudio-lk:c2')).toBe(0);
   });
 
   it('fila de atendimento por estúdio, em ordem de chegada e sem duplicar', async () => {

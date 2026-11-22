@@ -6,29 +6,81 @@ import {
   type ConversationSummary,
   type HandoffQueue,
   type HandoffTicket,
+  type ContactLock,
   type MediaNote,
   type MediaNotes,
   type MetricIncrement,
   type MetricsStore,
   type NoticeLedger,
+  type Outbox,
+  type OutboxEntry,
   type TimelineEntry,
 } from '../../application/ports.js';
 import { TIMELINE_LIMIT, summarize } from './summary.js';
 import { Conversation, type ConversationSnapshot } from '../../domain/conversation.js';
 
+export class InMemoryOutbox implements Outbox {
+  readonly entries = new Map<string, OutboxEntry>();
+  private readonly leases = new Set<string>();
+
+  add(entry: OutboxEntry): void {
+    this.entries.set(entry.id, entry);
+  }
+
+  async pending(limit: number): Promise<readonly OutboxEntry[]> {
+    return [...this.entries.values()].slice(0, limit);
+  }
+
+  async claim(entryId: string): Promise<boolean> {
+    if (this.leases.has(entryId)) return false;
+    this.leases.add(entryId);
+    return true;
+  }
+
+  /** Para os testes: vence a reserva (o prazo do lease no Redis). */
+  expireLeases(): void {
+    this.leases.clear();
+  }
+
+  async complete(entryId: string): Promise<void> {
+    this.entries.delete(entryId);
+    this.leases.delete(entryId);
+  }
+}
+
 export class InMemoryConversationRepository implements ConversationRepository {
   private readonly store = new Map<string, ConversationSnapshot>();
+
+  constructor(readonly outbox: InMemoryOutbox = new InMemoryOutbox()) {}
 
   async load(tenantId: string, contactId: string): Promise<Conversation | null> {
     const snapshot = this.store.get(`${tenantId}:${contactId}`);
     return snapshot ? Conversation.restore(snapshot) : null;
   }
 
-  async save(conversation: Conversation): Promise<void> {
+  async save(conversation: Conversation, outbox?: OutboxEntry): Promise<void> {
     const next = conversation.snapshot();
     const current = this.store.get(next.id);
     if ((current?.version ?? 0) !== next.version) throw new ConcurrentModification(next.id);
     this.store.set(next.id, { ...next, version: next.version + 1 });
+    if (outbox) this.outbox.add(outbox);
+  }
+}
+
+/** Mutex por contato dentro do processo (testes e execução local sem Redis). */
+export class InMemoryContactLock implements ContactLock {
+  private readonly tails = new Map<string, Promise<unknown>>();
+
+  async withLock<T>(tenantId: string, contactId: string, work: () => Promise<T>): Promise<T> {
+    const key = `${tenantId}\u0000${contactId}`;
+    const previous = this.tails.get(key) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(work);
+    this.tails.set(key, run);
+    try {
+      return await run;
+    } finally {
+      if (this.tails.get(key) === run) this.tails.delete(key);
+    }
   }
 }
 

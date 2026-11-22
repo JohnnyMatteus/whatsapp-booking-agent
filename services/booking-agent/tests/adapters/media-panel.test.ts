@@ -4,7 +4,7 @@ import { createLogger } from '@wba/observability';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpThumbnailSource, MediaProcessorUnavailable } from '../../src/adapters/media/http-thumbnails.js';
 import { createInboundHandler } from '../../src/adapters/messaging/consumer.js';
-import { InMemoryMediaNotes } from '../../src/adapters/persistence/in-memory.js';
+import { InMemoryContactLock, InMemoryMediaNotes } from '../../src/adapters/persistence/in-memory.js';
 import { CONVERSATION, setup, TENANT, THUMBNAIL_KEY } from '../support/panel-harness.js';
 import { NOW } from '../domain/fixtures.js';
 
@@ -16,7 +16,7 @@ describe('consumidor de media.processed', () => {
   it('guarda a anotação da mensagem sem acionar o agente', async () => {
     const mediaNotes = new InMemoryMediaNotes();
     const useCase = { execute: vi.fn() };
-    const handle = createInboundHandler({ useCase: useCase as never, metrics: {} as never, recorder: {} as never, mediaNotes, logger: createLogger('test'), tracer: {} as never });
+    const handle = createInboundHandler({ useCase: useCase as never, metrics: {} as never, recorder: {} as never, mediaNotes, locks: new InMemoryContactLock(), logger: createLogger('test'), tracer: {} as never });
 
     await handle(processed({ thumbnailKey: THUMBNAIL_KEY }));
     await handle(processed({ messageId: 'wamid.2', status: 'rejected', rejectionReason: 'too_large' } as object));

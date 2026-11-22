@@ -143,20 +143,19 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 
 - **Grafo com nós fixos em vez de agente livre**: perde naturalidade em pedidos compostos ("cancela a de terça e marca a de quarta" vira dois turnos) e ganha garantias testáveis.
 - **Três runtimes** (Node, Go, Python) mais o Kong: mais CI e mais manutenção, em troca do SDK MCP oficial em Go e do ecossistema de transcrição em Python.
-- **Publicar antes de salvar**: uma queda no meio gera resposta duplicada (rara) em vez de perdida. Outbox está nos próximos passos.
+- **Caixa de saída no Redis em vez de banco transacional**: a Conversa e as respostas do turno são gravadas juntas por um script Lua e publicadas depois ([ADR 0014](docs/adr/0014-outbox-e-exclusao-mutua-por-contato.md)); entrega pelo menos uma vez (duplicata rara), e o lock por contato evita turnos simultâneos mas não garante ordem.
 - **Tradutores duplicados de propósito** (Go e TypeScript): custo de manutenção para proteger os agregados mesmo contra um servidor MCP com bug.
 - **Duas falhas para transferir**: agressivo, para o aluno não repetir a pergunta três vezes.
 
 ## Próximos passos
 
-1. Outbox no booking-agent e serialização por contato na fila (hoje: publicar antes de salvar e compare-and-set com retry).
-2. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
-3. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
-4. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
-5. Testes de mutação no domínio e de carga no webhook no CI.
-6. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
-7. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
-8. Deploy com Helm atrás do `platform-edge`.
+1. Templates `lembrete_aula` e `vaga_liberada` criados e aprovados na conta Meta (o código já os envia).
+2. Flow de agendamento publicado na Meta (o tradutor já entende a conclusão).
+3. Teste de integração do media-processor com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura no S3 hoje só são testados sem broker nem bucket).
+4. Testes de mutação no domínio e de carga no webhook no CI.
+5. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
+6. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
+7. Deploy com Helm atrás do `platform-edge`.
 
 ## Licença
 
