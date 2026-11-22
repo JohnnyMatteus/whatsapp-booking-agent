@@ -21,7 +21,7 @@ const bus = await RabbitMqBus.connect(config.RABBITMQ_URL, logger);
 
 const app = buildWebhookServer({
   providers: buildProviders(config, new RedisMediaCache(redis)),
-  internalToken: config.INTERNAL_API_TOKEN,
+  internalToken: config.MEDIA_API_TOKEN,
   idempotency: new RedisIdempotencyStore(redis),
   publisher: bus,
   clock: { now: () => new Date() },
