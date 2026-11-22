@@ -1,6 +1,6 @@
 # Configuração declarativa do api-gateway (Kong OSS, modo DB-less; ADR 0012).
 # Fonte da verdade das políticas de borda: roteamento, rate limit e JWT do painel.
-# Os marcadores __NOME__ são trocados pelo entrypoint a partir do ambiente (o Kong não
+# Os marcadores entre sublinhados duplos são trocados pelo entrypoint a partir do ambiente (o Kong não
 # interpola variáveis no arquivo declarativo).
 _format_version: "3.0"
 _transform: true
