@@ -95,7 +95,7 @@ make seed TEXT="me conta uma piada"
 | http://127.0.0.1:15672 | RabbitMQ (filas, retry e DLQ) |
 | http://127.0.0.1:16686 · :9091 · :3000 | Jaeger · Prometheus · Grafana |
 
-O api-gateway lê a chave pública do Keycloak só ao subir: se o Keycloak gerar outro par (volume `keycloak-data` apagado por `make clean`), todo token dá 401 até `docker compose restart api-gateway`.
+O api-gateway lê a chave pública do Keycloak só ao subir: se o contêiner do Keycloak for recriado, ele gera outro par e todo token dá 401 até `docker compose restart api-gateway`.
 
 Para um cluster há um chart Helm em [`deploy/helm/wba`](deploy/helm/wba) (nunca instalado; ver o README dele).
 
