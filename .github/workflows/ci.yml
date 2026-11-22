@@ -149,7 +149,7 @@ jobs:
         run: docker build -t whatsapp-booking-agent/media-processor:ci .
 
   api-gateway:
-    name: api-gateway (Kong DB-less: configuração e smoke das políticas)
+    name: "api-gateway (Kong DB-less: configuração e smoke das políticas)"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
