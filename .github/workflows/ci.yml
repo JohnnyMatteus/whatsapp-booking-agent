@@ -289,7 +289,7 @@ jobs:
         run: |
           set -o pipefail
           scripts/e2e.sh 2>&1 | tee "$RUNNER_TEMP/e2e.log"
-      - name: Carga no webhook (k6: 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens de um contato)
+      - name: "Carga no webhook (k6, 50 req/s de contatos distintos por 20 s e uma rajada de 20 mensagens de um contato)"
         run: |
           set -o pipefail
           docker run --rm --network whatsapp-booking-net -v "$PWD/infra/load:/scripts:ro" grafana/k6:1.0.0 run /scripts/webhook.js 2>&1 | tee "$RUNNER_TEMP/k6.log"
