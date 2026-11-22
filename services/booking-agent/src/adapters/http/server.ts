@@ -46,6 +46,8 @@ const NoticeBody = z.object({
 const StatusQuery = z.enum(['handed_off', 'bot_active', 'all']).default('all');
 const DaysQuery = z.coerce.number().int().min(1).max(30).default(7);
 
+const PUBLIC_ROUTES: ReadonlySet<string> = new Set(['/healthz', '/metrics']);
+
 function equalToken(received: string | undefined, token: string): boolean {
   const expected = Buffer.from(`Bearer ${token}`);
   const actual = Buffer.from(received ?? '');
@@ -56,8 +58,11 @@ export function buildPanelApi(deps: PanelApiDeps): FastifyInstance {
   const app = Fastify({ logger: false });
 
   app.addHook('onRequest', async (request, reply) => {
-    const token = request.url.startsWith('/api/') ? deps.token : request.url.startsWith('/internal/') ? deps.internalToken : null;
-    if (token !== null && !equalToken(request.headers.authorization, token)) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
+    // A rota casada, não request.url: o roteador decodifica o caminho (/%61pi/... cai em /api/...).
+    const route = request.routeOptions.url;
+    if (route === undefined || PUBLIC_ROUTES.has(route)) return;
+    const token = route.startsWith('/internal/') ? deps.internalToken : deps.token;
+    if (!equalToken(request.headers.authorization, token)) return reply.code(401).send({ error: 'não autorizado', code: 'unauthorized' });
   });
 
   const fail = (reply: FastifyReply, error: unknown) => {

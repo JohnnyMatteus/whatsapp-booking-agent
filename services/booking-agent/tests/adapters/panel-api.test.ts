@@ -63,6 +63,34 @@ describe('API do painel', () => {
     expect((await app.inject({ method: 'POST', url: `/internal/tenants/${TENANT}/notifications`, headers: auth, payload: {} })).statusCode).toBe(401);
   });
 
+  it.each([
+    ['GET', '/api/tenants/T/conversations'],
+    ['GET', '/api/tenants/T/conversations/:c'],
+    ['POST', '/api/tenants/T/conversations/:c/messages'],
+    ['POST', '/api/tenants/T/conversations/:c/resume'],
+    ['GET', '/api/tenants/T/metrics'],
+    ['GET', '/api/tenants/T/scope'],
+    ['POST', '/internal/tenants/T/notifications'],
+  ] as const)('%s %s com o caminho codificado também exige token', async (method, template) => {
+    const { app, published } = await setup({ handedOff: true });
+    const path = template.replace('/T/', `/${TENANT}/`).replace('/:c', `/${CONVERSATION}`);
+    const encoded = path.replace('/api/', '/%61pi/').replace('/internal/', '/%69nternal/');
+
+    for (const url of [path, encoded]) {
+      const payload = method === 'POST' ? { text: 'oi', contactId: CONTACT, kind: 'reminder', sessionId: 'ses-hatha-1', date: '2026-03-03' } : undefined;
+      expect((await app.inject({ method, url, ...(payload ? { payload } : {}) })).statusCode, url).toBe(401);
+    }
+    expect(published).toEqual([]);
+  });
+
+  it('só saúde e métricas do Prometheus são públicas; caminho sem rota dá 404', async () => {
+    const { app } = await setup();
+
+    expect((await app.inject({ url: '/healthz' })).statusCode).toBe(200);
+    expect((await app.inject({ url: '/metrics' })).statusCode).toBe(200);
+    expect((await app.inject({ url: '/api/nao-existe' })).statusCode).toBe(404);
+  });
+
   it('lista a fila com transferidas primeiro, contato mascarado e contadores', async () => {
     const { app } = await setup({ handedOff: true });
 
