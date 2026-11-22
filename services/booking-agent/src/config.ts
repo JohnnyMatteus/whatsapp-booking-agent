@@ -26,7 +26,8 @@ const Env = z.object({
   CONSUMER_PREFETCH: z.coerce.number().int().min(1).default(5),
   CONSUMER_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(4),
   CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().min(100).default(3000),
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  // Vazio = sem exportação: é o que o compose passa por padrão.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
 });
 export type AgentConfig = z.infer<typeof Env>;
 
