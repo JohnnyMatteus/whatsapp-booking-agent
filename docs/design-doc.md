@@ -15,7 +15,7 @@ Este projeto coloca um agente no número de WhatsApp Business do estúdio. Ele m
 
 Duas restrições externas moldam o desenho:
 
-1. **Somente a WhatsApp Cloud API oficial.** Nada de bibliotecas que automatizam o WhatsApp Web: elas violam os termos da Meta e derrubam o número do estúdio.
+1. **WhatsApp Cloud API oficial por padrão.** Nada de bibliotecas que automatizam o WhatsApp Web dentro dos nossos serviços: elas violam os termos da Meta e derrubam o número. O estúdio pode optar, por configuração, pelo **Whatsmiau** (servidor externo não oficial, alternativo à Meta), ciente dos riscos de banimento e de violação dos termos; ver o [ADR 0010](adr/0010-messaging-gateway-e-provedores-de-whatsapp.md), que também diz quando usar cada provedor.
 2. **Desde 15/01/2026 a política da Meta proíbe chatbots de uso geral na plataforma.** O agente precisa ter escopo fechado e demonstrável: aulas e reservas. Pedido fora disso recebe uma recusa educada.
 
 ## 2. Objetivos e não-objetivos
@@ -26,8 +26,9 @@ Duas restrições externas moldam o desenho:
 - O bot **só cita horários que vieram das ferramentas** (a API do SaaS), com garantia por código e teste que prova.
 - Escopo fechado com recusa educada, decidido por um classificador determinístico mais o LLM, sem que o LLM consiga reverter o determinístico.
 - Transferência para humano por pedido explícito, por falha repetida ou por tema sensível. Transferida, a conversa vai para a fila de atendimento e o bot para de responder.
-- Webhook seguro (X-Hub-Signature-256) e idempotente pelo id da mensagem.
-- Nenhum tipo da Meta ou do SaaS dentro do domínio (Anti-Corruption Layer nos dois pontos).
+- Webhook autêntico (assinatura da Meta ou segredo do Whatsmiau) e idempotente pelo id da mensagem.
+- Nenhum tipo de provedor ou do SaaS dentro do domínio (Anti-Corruption Layer por provedor e no SaaS); o domínio e o booking-agent não sabem qual provedor atende o estúdio.
+- Entrada única pelo api-gateway (Kong): roteamento, rate limit e JWT do painel.
 
 **Não-objetivos nesta fundação**
 
@@ -43,18 +44,32 @@ Clean Architecture + Hexagonal + DDD, em microsserviços, no mesmo padrão dos o
 ```mermaid
 flowchart LR
   aluno((Aluno no WhatsApp)) -- mensagem --> meta[WhatsApp Cloud API]
-  meta -- webhook assinado --> webhook
+  aluno -. estúdio que optou .-> miau[Whatsmiau<br/>não oficial]
+  meta -- webhook assinado --> kong
+  miau -- webhook + segredo --> kong
+  web[web · Vue 3<br/>fila de atendimento] -- JWT --> kong
+  kong{{api-gateway · Kong DB-less<br/>roteamento · rate limit · JWT do painel}}
+  kong -- /webhooks/* sem JWT --> webhook
+  kong -- /api --> agent
 
-  subgraph gateway[whatsapp-gateway · TypeScript]
-    webhook[webhook<br/>assinatura · idempotência · ACL de entrada]
-    sender[sender<br/>ACL de saída · retry · DLQ]
+  subgraph gateway[messaging-gateway · TypeScript]
+    webhook[webhook<br/>autenticidade · idempotência]
+    port{{porta MessagingProvider<br/>envio · webhook · status · mídia}}
+    cloud[providers/cloud-api<br/>ACL da Meta]
+    wm[providers/whatsmiau<br/>ACL própria]
+    sender[sender<br/>retry · DLQ]
+    webhook --> port
+    sender --> port
+    port --- cloud
+    port --- wm
   end
 
   webhook -- comandos --> mq[(RabbitMQ<br/>wba.events)]
   webhook <--> redis[(Redis)]
-  mq -- inbound.audio_received --> worker[transcription-worker · Python<br/>faster-whisper local]
-  worker -- áudio --> s3[(MinIO / S3)]
-  worker -- inbound.message_received --> mq
+  mq -- inbound.media_received --> media[media-processor · Python<br/>valida · miniatura · faster-whisper]
+  media -- GET /internal/media --> webhook
+  media -- original e miniatura --> s3[(MinIO / S3)]
+  media -- inbound.message_received<br/>media.processed --> mq
   mq -- inbound.* --> agent
 
   subgraph agentbox[booking-agent · TypeScript]
@@ -67,8 +82,8 @@ flowchart LR
   mcp -- REST v1 + JWT --> saas[saas-multitenant]
   agent -- outbound.reply_requested<br/>attendance.handoff_requested --> mq
   mq -- respostas --> sender
-  sender -- POST /messages --> meta
-  web[web · Vue 3<br/>fila de atendimento] -- API do painel --> agent
+  cloud -- POST /messages --> meta
+  wm -- POST /v1/message/send* --> miau
 ```
 
 **Camadas no booking-agent** (onde está o domínio):
@@ -84,7 +99,7 @@ flowchart LR
 
 Detalhes e custo no [ADR 0002](adr/0002-anti-corruption-layer.md).
 
-1. **WhatsApp** (`services/whatsapp-gateway/src/acl`): o payload da Cloud API (webhook, texto, áudio, interativos de lista e botão, conclusão de Flow, resposta de template, status de entrega e tipos desconhecidos) vira comandos e eventos da linguagem publicada: `MensagemRecebida` (`inbound.message_received`), `PedidoDeReserva` (`inbound.booking_requested`), `PedidoDeCancelamento` (`inbound.cancellation_requested`), pedido de lista de espera, áudio recebido e mudança de status. Na saída, a resposta neutra do domínio (texto ou opções) vira texto, botões ou lista da Cloud API, respeitando os limites da Meta. Os tipos da Meta vivem num único arquivo (`cloud-api-types.ts`).
+1. **WhatsApp** (uma ACL por provedor em `services/messaging-gateway/src/providers/*/acl`; o Whatsmiau segue o mesmo padrão com fixtures no formato Evolution API): o payload da Cloud API (webhook, texto, áudio, interativos de lista e botão, conclusão de Flow, resposta de template, status de entrega e tipos desconhecidos) vira comandos e eventos da linguagem publicada: `MensagemRecebida` (`inbound.message_received`), `PedidoDeReserva` (`inbound.booking_requested`), `PedidoDeCancelamento` (`inbound.cancellation_requested`), pedido de lista de espera, mídia recebida (`inbound.media_received`, áudio ou imagem) e mudança de status. Na saída, a resposta neutra do domínio (texto ou opções) vira texto, botões ou lista da Cloud API, respeitando os limites da Meta. Os tipos da Meta vivem num único arquivo (`cloud-api-types.ts`) e os do Whatsmiau noutro (`whatsmiau-types.ts`). O protocolo de ids interativos (`v1:bk:<aula>`) é compartilhado: a escolha do aluno volta como o mesmo comando nos dois provedores.
 2. **SaaS** (`services/saas-mcp-server/internal/adapters/saas`): `SessionResource`, `BookingResource` e `problem+json` do SaaS viram `Aula`, `Reserva` e erros de domínio com códigos estáveis. Uma segunda barreira no booking-agent (`adapters/mcp/scheduling-tools.ts`) valida a resposta das ferramentas por schema e reconstrói os agregados, reaplicando as invariantes.
 
 ## 4. Modelo de dados
@@ -108,11 +123,12 @@ Envelope versionado (`packages/contracts`): `{ id, type, version: 1, occurredAt,
 
 | type | Produtor | Consumidor | Payload (resumo) |
 | --- | --- | --- | --- |
-| `inbound.message_received` | gateway, worker | booking-agent | origem + `text` (com `transcribed`) ou `unsupported` |
-| `inbound.audio_received` | gateway | transcription-worker | origem + `mediaId`, `mimeType` |
-| `inbound.booking_requested` | gateway | booking-agent | origem + `sessionId`, `source` (`list`, `button`, `form`) |
-| `inbound.cancellation_requested` | gateway | booking-agent | origem + `bookingId`, `source` |
-| `inbound.waitlist_requested` | gateway | booking-agent | origem + `sessionId`, `source` |
+| `inbound.message_received` | messaging-gateway, media-processor | booking-agent | origem + `text` (com `transcribed`) ou `unsupported` |
+| `inbound.media_received` | messaging-gateway | media-processor | origem + `kind` (`audio`, `image`), `mediaId`, `mimeType` |
+| `media.processed` | media-processor | (painel, evolução) | origem + `kind`, `status`, `storageKey`, `thumbnailKey?`, `transcribed`, `rejectionReason?` |
+| `inbound.booking_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` (`list`, `button`, `form`) |
+| `inbound.cancellation_requested` | messaging-gateway | booking-agent | origem + `bookingId`, `source` |
+| `inbound.waitlist_requested` | messaging-gateway | booking-agent | origem + `sessionId`, `source` |
 | `inbound.delivery_status_changed` | gateway | booking-agent (métrica) | `messageId`, `status`, `errorCode?` |
 | `outbound.reply_requested` | booking-agent | sender | `contactId`, `content` (`text` ou `choices`) |
 | `attendance.handoff_requested` | booking-agent | fila `attendance.handoffs` | `conversationId`, `reason`, `requestedAt` |
@@ -147,6 +163,7 @@ sequenceDiagram
   autonumber
   participant A as Aluno
   participant M as Cloud API
+  participant K as api-gateway
   participant W as webhook
   participant R as Redis
   participant Q as RabbitMQ
@@ -157,8 +174,9 @@ sequenceDiagram
   participant X as sender
 
   A->>M: "Quais horários tem amanhã?"
-  M->>W: POST /webhook (X-Hub-Signature-256)
-  W->>W: valida HMAC do corpo bruto
+  M->>K: POST /webhooks/cloud-api (X-Hub-Signature-256)
+  K->>W: rate limit e limite de corpo, sem JWT
+  W->>W: provedor valida HMAC do corpo bruto (porta MessagingProvider)
   W->>R: SET NX wba:webhook:seen:wamid
   W->>Q: inbound.message_received
   W-->>M: 200
@@ -172,7 +190,7 @@ sequenceDiagram
   B->>B: guard de citação (só horários das ferramentas)
   B->>Q: outbound.reply_requested (choices)
   Q->>X: entrega
-  X->>M: lista interativa (ids v1:bk:<aula>)
+  X->>M: lista interativa pelo provedor do estúdio (ids v1:bk:<aula>)
   A->>M: toca em "Hatha Yoga"
   M->>W: interactive.list_reply
   W->>Q: inbound.booking_requested
@@ -183,23 +201,29 @@ sequenceDiagram
   B->>Q: "Pronto! Sua vaga em Hatha Yoga (ter 03/03 18:00) está confirmada."
 ```
 
-### 5.2 Áudio
+### 5.2 Áudio e imagem
 
 ```mermaid
 sequenceDiagram
   participant W as webhook
   participant Q as RabbitMQ
-  participant P as transcription-worker
-  participant M as Cloud API
+  participant P as media-processor
   participant S as MinIO/S3
   participant B as booking-agent
-  W->>Q: inbound.audio_received(mediaId)
+  W->>Q: inbound.media_received(kind, mediaId)
   Q->>P: entrega
-  P->>M: GET /{media-id} e download com token
-  P->>S: guarda o áudio (expira em 30 dias)
-  P->>P: transcreve localmente (faster-whisper)
-  P->>Q: inbound.message_received(text, transcribed=true, mesmo messageId)
-  Q->>B: segue o fluxo de texto
+  P->>W: GET /internal/media/{estúdio}/{mediaId} (token de serviço)
+  W->>W: provedor do estúdio baixa a mídia (Cloud API ou cache do Whatsmiau)
+  P->>P: valida tipo pelos bytes e tamanho
+  P->>S: guarda o original (expira em 30 dias)
+  alt áudio
+    P->>P: transcreve localmente (faster-whisper)
+    P->>Q: media.processed e inbound.message_received(text, transcribed=true, mesmo messageId)
+    Q->>B: segue o fluxo de texto
+  else imagem
+    P->>S: miniatura JPEG
+    P->>Q: media.processed e inbound.message_received(unsupported)
+  end
 ```
 
 ### 5.3 Transferência para humano
@@ -249,20 +273,21 @@ O sender consome `whatsapp-sender.replies`. Erro transitório da Cloud API (429,
 
 ## 7. Segurança
 
-- **Webhook**: HMAC-SHA256 do corpo bruto com o App Secret, comparação em tempo constante; token do handshake também em tempo constante; limite de 256 KB por requisição.
-- **Somente a Cloud API oficial**, com token de sistema guardado fora do código (`.env` em desenvolvimento, cofre em produção).
+- **Borda**: o api-gateway (Kong) é a única entrada pública, com rate limit e limite de corpo por rota; os webhooks não passam por JWT e `/internal` não tem rota pública ([ADR 0012](adr/0012-api-gateway-kong.md)).
+- **Webhook**: Cloud API, HMAC-SHA256 do corpo bruto com o App Secret; Whatsmiau, segredo compartilhado no cabeçalho da instância (ele não assina o corpo), ambos em tempo constante e validados no messaging-gateway; token do handshake também em tempo constante; limite de 256 KB (Cloud API) e 20 MB (Whatsmiau, que embute mídia).
+- **Cloud API oficial como padrão**, com token de sistema guardado fora do código (`.env` em desenvolvimento, cofre em produção). Whatsmiau é opt-in por estúdio, com os riscos do ADR 0010.
 - **Identidade nas ferramentas** sempre vinda da conversa (estúdio pelo número que recebeu a mensagem, contato pelo remetente). O LLM não preenche argumento de identidade e não chama ferramentas.
 - **Servidor MCP** em rede interna e protegido por token compartilhado; o SaaS continua aplicando isolamento por tenant e RBAC pelo JWT.
 - **Dados pessoais (LGPD)**: telefone e texto do aluno são censurados nos logs (redação no pino); erros nunca incluem corpo de resposta da Meta, do SaaS ou do LLM (podem ecoar a mensagem); o painel recebe o contato mascarado; o áudio expira em 30 dias no bucket; a transcrição é local, então a voz do aluno não vai para API de terceiros.
-- **OWASP API**: validação de entrada por schema em todas as fronteiras (webhook, fila, ferramentas, LLM, configuração); sem SSRF (URLs de mídia só da Cloud API configurada); falha de configuração derruba o processo na subida citando só o nome da variável.
-- **Painel**: token provisório injetado pelo proxy (nunca no navegador); a troca por OIDC no Keycloak do SaaS está nos próximos passos.
+- **OWASP API**: validação de entrada por schema em todas as fronteiras (webhook, fila, ferramentas, LLM, configuração); sem SSRF (URLs de mídia só da Cloud API configurada ou dos hosts permitidos do Whatsmiau); falha de configuração derruba o processo na subida citando só o nome da variável.
+- **Painel**: JWT injetado pelo proxy do painel (nunca no navegador) e validado no api-gateway, que troca pelo token de serviço do booking-agent; em desenvolvimento é HS256 sem expiração, e a troca por OIDC no Keycloak está nos próximos passos.
 
 ## 8. Observabilidade
 
 | Sinal | Como |
 | --- | --- |
 | Logs | JSON em stdout (pino nos serviços Node, slog no Go, logging no Python), com `service`, `correlationId` (id da mensagem do WhatsApp), `trace_id` e `span_id`; telefone e texto censurados |
-| Métricas | Prometheus em `/metrics` de cada serviço: `wba_webhook_requests_total`, `wba_webhook_items_total{type,outcome}`, `wba_agent_turns_total{outcome}`, `wba_handoffs_total{reason}`, `wba_llm_output_rejected_total{stage}`, `wba_citation_violations_total`, `wba_queue_messages_total{queue,result}`, `wba_outbound_messages_total`, `wba_cloud_api_request_seconds`, `wba_mcp_tool_calls_total{tool,result}`, `wba_saas_request_seconds{route,status}` |
+| Métricas | Prometheus em `/metrics` de cada serviço: `wba_webhook_requests_total{provider,result}`, `wba_webhook_items_total{provider,type,outcome}`, `wba_agent_turns_total{outcome}`, `wba_handoffs_total{reason}`, `wba_llm_output_rejected_total{stage}`, `wba_citation_violations_total`, `wba_queue_messages_total{queue,result}`, `wba_outbound_messages_total{provider,result}`, `wba_provider_request_seconds{provider}`, `wba_mcp_tool_calls_total{tool,result}`, `wba_saas_request_seconds{route,status}` |
 | Traces | OpenTelemetry com propagação W3C pelos headers do RabbitMQ e pelo HTTP do MCP até o SaaS; exportação OTLP para o Jaeger quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido |
 | Alertas | `infra/prometheus/alerts.yml`: citação fora das ferramentas (page), assinatura inválida, mensagens na DLQ e taxa de transferência por falha acima de 5% |
 
@@ -272,6 +297,7 @@ O sender consome `whatsapp-sender.replies`. Erro transitório da Cloud API (429,
 | --- | --- |
 | Bibliotecas não oficiais do WhatsApp Web | violam os termos da Meta e derrubam o número; ver [ADR 0003](adr/0003-escopo-fechado-e-recusas.md) |
 | Agente ReAct livre, com o LLM chamando as ferramentas | o LLM poderia inventar ids, horários e identidade; o grafo com nós fixos é previsível e testável ([ADR 0008](adr/0008-agente-langgraph-como-adapter.md)) |
+| Messaging-gateway como serviço por provedor | duplicaria idempotência, mídia e roteamento por estúdio; a porta `MessagingProvider` isola o código com um só deploy (ADR 0010) |
 | Monólito único com webhook, agente e envio | o webhook precisa responder rápido e escalar diferente do agente (que espera LLM); o envio tem retry próprio |
 | Domínio direto sobre os tipos do SaaS | qualquer mudança do SaaS vazaria para as regras do bot; ACL isola ([ADR 0002](adr/0002-anti-corruption-layer.md)) |
 | Kafka em vez de RabbitMQ | o problema é fila de trabalho com retry e DLQ por consumidor, não log de eventos com replay ([ADR 0006](adr/0006-mensageria-rabbitmq.md)) |
@@ -311,7 +337,8 @@ Conforme `courses.yaml` (`exercised_by: whatsapp-booking-agent`):
 3. **Outbox** no booking-agent para publicar e salvar atomicamente, e **serialização por contato** (consistent hash exchange ou single active consumer por partição) para eliminar a corrida resolvida hoje por compare-and-set e retry.
 4. **Templates aprovados** para avisar promoção da lista de espera e lembrar aula (fora da janela de 24 horas).
 5. **Flow de agendamento publicado** na Meta (o tradutor já entende a conclusão `{action, target_id}`).
-6. **transcription-worker**: retry com TTL e DLQ iguais aos serviços Node, métricas Prometheus e teste de integração com MinIO.
-7. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
+6. **media-processor**: retry com TTL e DLQ iguais aos serviços Node, métricas Prometheus e teste de integração com MinIO; painel com miniaturas.
+7. **Whatsmiau real**: validar o adaptador contra uma instância pareada (hoje fixtures no formato documentado) e tratar JIDs `@lid`.
+8. **Testes avançados**: mutação no domínio (Stryker) e carga no webhook (k6) no CI.
 8. **Painel com login** OIDC no Keycloak do SaaS, conversas e métricas de atendimento.
 9. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.

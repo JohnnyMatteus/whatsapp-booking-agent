@@ -15,11 +15,11 @@ Se esses modelos entrarem no domínio, qualquer mudança da Meta ou do SaaS queb
 
 Tradutores na infraestrutura, atrás das portas, nos dois pontos:
 
-- **WhatsApp** (`services/whatsapp-gateway/src/acl`): `translateWebhook` converte o webhook em comandos da linguagem publicada (`@wba/contracts`) e `translateReply` converte a resposta neutra em corpo da Cloud API. Os schemas da Meta ficam num único arquivo (`cloud-api-types.ts`). Item desconhecido no lote vira "ignorado" sem derrubar os outros. Até o vocabulário da origem da escolha é neutro (`list`, `button`, `form`, não `list_reply`): um teste falha se um nome de campo da Meta aparecer no comando.
+- **WhatsApp** (uma ACL por provedor, ADR 0010): `services/messaging-gateway/src/providers/cloud-api/acl` (`translateWebhook` e `translateReply`; tipos da Meta só em `cloud-api-types.ts`) e `providers/whatsmiau/acl` (`translateWhatsmiauWebhook` e `translateReply`; tipos do Whatsmiau só em `whatsmiau-types.ts`). Os dois convertem para a mesma linguagem publicada (`@wba/contracts`). Item desconhecido no lote vira "ignorado" sem derrubar os outros. Até o vocabulário da origem da escolha é neutro (`list`, `button`, `form`, não `list_reply`): um teste falha se um nome de campo da Meta aparecer no comando.
 - **SaaS** (`services/saas-mcp-server/internal/adapters/saas`): `toAula`, `toReserva` e `toDomainError` com mapas explícitos de status e de `type` de erro. Valor novo do SaaS cai num caso conhecido (`saas_indisponivel` ou `erro_inesperado`), nunca passa adiante sem tradução. O `detail` do SaaS não é repassado (texto livre não é contrato). A regra da fila silenciosa é corrigida aqui: `reservar` em aula lotada devolve `aula_lotada`, e entrar na fila é a ferramenta `entrar_lista_espera`.
 - **Segunda barreira** no booking-agent (`adapters/mcp/scheduling-tools.ts`): a resposta das ferramentas é validada por schema e reconstruída como agregados (`ClassSession.create` reaplica as invariantes); cada código de erro tem destino explícito em `DomainError`, e código desconhecido é falha do bot, não regra de negócio.
 
-Cada tradutor tem **testes de contrato** com payloads no formato real, anonimizados: `tests/contract/fixtures/` no gateway e `internal/adapters/saas/testdata/` no servidor MCP.
+Cada tradutor tem **testes de contrato** com payloads no formato real, anonimizados: `tests/cloud-api/fixtures/` e `tests/whatsmiau/fixtures/` no messaging-gateway e `internal/adapters/saas/testdata/` no servidor MCP.
 
 ## Consequências
 
