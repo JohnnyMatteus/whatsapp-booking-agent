@@ -155,3 +155,39 @@ def test_metricas_usam_os_nomes_dos_alertas_existentes() -> None:
 
     assert registry.get_sample_value("wba_queue_messages_total", {"queue": QUEUE, "result": "dead_letter"}) == 1
     assert registry.get_sample_value("wba_media_processed_total", {"outcome": "rejected"}) == 1
+
+
+async def test_consumo_que_morre_sozinho_encerra_com_erro_para_o_restart_agir() -> None:
+    import asyncio
+
+    from media_processor.consumer import run_until_stopped
+
+    async def drain_quebrado() -> None:
+        raise ConnectionError("canal fechado")
+
+    async def drain_encerrado() -> None:
+        return None
+
+    assert await asyncio.wait_for(run_until_stopped(drain_quebrado(), asyncio.Event()), 1) == 1
+    assert await asyncio.wait_for(run_until_stopped(drain_encerrado(), asyncio.Event()), 1) == 1
+
+
+async def test_pedido_de_parada_encerra_limpo_e_cancela_o_consumo() -> None:
+    import asyncio
+
+    from media_processor.consumer import run_until_stopped
+
+    cancelled = asyncio.Event()
+
+    async def drain_infinito() -> None:
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    stop = asyncio.Event()
+    stop.set()
+
+    assert await asyncio.wait_for(run_until_stopped(drain_infinito(), stop), 1) == 0
+    assert cancelled.is_set()

@@ -7,9 +7,10 @@ Fica separado do aio-pika por protocolos para ser testado sem broker.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -101,3 +102,23 @@ def _parse(body: bytes) -> dict[str, Any]:
 def _attempt_of(headers: Mapping[str, Any]) -> int:
     value = headers.get(ATTEMPT_HEADER, 1)
     return value if isinstance(value, int) and value >= 1 else 1
+
+
+async def run_until_stopped(drain: Awaitable[None], stop: asyncio.Event) -> int:
+    """Espera o primeiro entre o pedido de parada e o fim do consumo. Devolve o código de saída.
+
+    O consumo terminar sozinho (erro de ack em canal fechado, iterador encerrado) não é parada: o processo
+    precisa sair com erro para o restart agir, em vez de ficar vivo, com o healthcheck verde e sem consumir.
+    """
+    drain_task = asyncio.ensure_future(drain)
+    stop_task = asyncio.ensure_future(stop.wait())
+    await asyncio.wait({drain_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+    stopped = stop.is_set()
+    for task in (drain_task, stop_task):
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+    if stopped:
+        return 0
+    logger.error("media_consumer_ended_unexpectedly")
+    return 1

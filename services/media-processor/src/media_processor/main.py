@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from .consumer import ConsumerOptions, Delivery, handle_delivery
+from .consumer import ConsumerOptions, Delivery, handle_delivery, run_until_stopped
 from .http_api import handle_request
 from .service import ProcessMedia
 from .topology import BINDINGS, EXCHANGE, QUEUE, queue_arguments
@@ -125,7 +125,7 @@ class _Forwarder:
         await self._channel.default_exchange.publish(message, routing_key=queue)
 
 
-async def consume() -> None:
+async def consume() -> int:
     import aio_pika
     from prometheus_client import REGISTRY
     from prometheus_client.exposition import CONTENT_TYPE_LATEST, generate_latest
@@ -168,12 +168,11 @@ async def consume() -> None:
             async for message in messages:
                 await handle_delivery(_Delivery(message), service.handle, forwarder, observer, options, time.monotonic)
 
-        task = asyncio.create_task(drain())
-        await stop.wait()
-        task.cancel()
+        code = await run_until_stopped(drain(), stop)
     await connection.close()
+    return code
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='{"level":"%(levelname)s","msg":"%(message)s"}')
-    asyncio.run(consume())
+    raise SystemExit(asyncio.run(consume()))
