@@ -353,4 +353,4 @@ O que já saiu do plano (vínculo do aluno, caixa de entrada humana, avisos por 
 4. **media-processor**: teste de integração com RabbitMQ e MinIO reais (o retry até a DLQ e a leitura da miniatura hoje só são testados sem broker nem bucket).
 5. **Testes de mutação** no domínio (Stryker): falta a dependência no manifest e no lockfile. O ponta a ponta no compose e a carga no webhook (k6) rodam no job `e2e` do CI.
 6. **Login contra um Keycloak real** (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio na rota `/internal`.
-7. **Deploy**: Helm e GitOps no padrão do `platform-edge`, atrás do gateway compartilhado.
+7. **Deploy**: o chart Helm (`deploy/helm/wba`) só foi validado por `helm lint` e `helm template` no CI; falta instalá-lo num cluster e ligá-lo ao gateway compartilhado e ao GitOps do `platform-edge`.

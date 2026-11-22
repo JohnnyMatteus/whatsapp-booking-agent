@@ -1,0 +1,18 @@
+{{- if .Values.networkPolicy.enabled }}
+# Só o api-gateway e o painel (wba/exposure=public) aceitam tráfego de fora do namespace; os demais só de
+# dentro dele. Não substitui a autenticação de cada componente: é uma camada a mais.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wba-internal-only
+  labels:
+    {{- include "wba.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      wba/exposure: internal
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+{{- end }}

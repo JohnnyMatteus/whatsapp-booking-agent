@@ -97,6 +97,8 @@ make seed TEXT="me conta uma piada"
 
 O api-gateway lê a chave pública do Keycloak só ao subir: se o Keycloak gerar outro par (volume `keycloak-data` apagado por `make clean`), todo token dá 401 até `docker compose restart api-gateway`.
 
+Para um cluster há um chart Helm em [`deploy/helm/wba`](deploy/helm/wba) (nunca instalado; ver o README dele).
+
 Sem o `saas-multitenant`, o servidor MCP fala com um WireMock que devolve aulas com datas relativas a hoje. Para usar o SaaS real pela rede compartilhada do portfólio: `make network && make up-portfolio`.
 
 ## Como testar
@@ -157,7 +159,7 @@ Roteiros do núcleo, com perguntas de entrevista: [escopo e recusas](docs/roteir
 4. Testes de mutação no domínio (Stryker): falta adicionar a dependência e o lockfile, o que exige instalar pacotes.
 5. Whatsmiau contra uma instância real (hoje só fixtures no formato documentado e mock); LID não resolvido pelo Whatsmiau (chega como `@lid`) segue ignorado: falta confirmar numa instância real se o envio aceita LID.
 6. Login do painel contra um Keycloak real (hoje só o realm de desenvolvimento e provedor falso nos testes), rotação da chave pública no Kong e token de serviço por estúdio em `/internal`.
-7. Deploy com Helm atrás do `platform-edge`.
+7. Instalar o chart (`deploy/helm/wba`, validado só por `helm lint` e `helm template` no CI) num cluster e ligá-lo ao gateway compartilhado do `platform-edge`.
 
 ## Licença
 

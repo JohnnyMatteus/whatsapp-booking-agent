@@ -1,0 +1,135 @@
+# Valores de exemplo. Nada aqui é segredo: segredos vêm de um Secret que já existe no cluster (secretName).
+# Um release por namespace: os Services levam o nome simples do componente (messaging-webhook, booking-agent...),
+# que é o que o kong.yaml e o nginx do painel esperam.
+
+image:
+  registry: ghcr.io/example/whatsapp-booking-agent
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Secret existente com as chaves: RABBITMQ_URL, REDIS_URL, MCP_AUTH_TOKEN, INTERNAL_API_TOKEN, MEDIA_API_TOKEN,
+# WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN, WHATSAPP_ACCESS_TOKEN, WHATSMIAU_API_KEY, WHATSMIAU_WEBHOOK_SECRET,
+# LLM_API_KEY, SAAS_AGENT_CLIENTS, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Obrigatório: o chart não cria segredos.
+secretName: ""
+
+# Configuração não secreta, comum a todos os componentes (vira um ConfigMap).
+config:
+  TENANT_CHANNELS: '{"estudio-lotus":{"provider":"cloud-api","phoneNumberId":"100000000000001"}}'
+  WHATSAPP_API_BASE_URL: https://graph.facebook.com
+  WHATSAPP_API_VERSION: v23.0
+  LLM_BASE_URL: http://llm.example.internal/v1
+  LLM_MODEL: modelo-exemplo
+  STUDIO_TIMEZONE: America/Sao_Paulo
+  OIDC_ISSUER: https://login.example.com/realms/wba
+  OIDC_AUDIENCE: wba-api
+  OIDC_JWKS_URL: https://login.example.com/realms/wba/protocol/openid-connect/certs
+  OIDC_REALM_URL: https://login.example.com/realms/wba
+  OIDC_CLIENT_ID: wba-panel
+  SAAS_BASE_URL: http://saas.example.internal/api
+  SAAS_TOKEN_URL: https://login.example.com/realms/studio/protocol/openid-connect/token
+  MCP_SERVER_URL: http://saas-mcp-server:8090/mcp
+  MEDIA_PROCESSOR_URL: http://media-processor:8083
+  GATEWAY_URL: http://messaging-webhook:8080
+  MEDIA_BUCKET: wba-media
+  S3_ENDPOINT_URL: ""
+  REMINDER_TENANTS: estudio-lotus
+  LOG_LEVEL: info
+
+# Exposição: só o api-gateway e o painel recebem tráfego de fora. O ingress (ou o gateway compartilhado do
+# platform-edge) aponta para eles; os demais componentes só aceitam tráfego interno (NetworkPolicy abaixo).
+ingress:
+  enabled: false
+  className: ""
+  host: wba.example.com
+  tlsSecretName: ""
+
+networkPolicy:
+  enabled: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile: { type: RuntimeDefault }
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+
+services:
+  api-gateway:
+    enabled: true
+    public: true
+    image: api-gateway
+    port: 8000
+    replicas: 2
+    env:
+      - { name: OIDC_ISSUER, valueFrom: { configMapKeyRef: { name: wba-config, key: OIDC_ISSUER } } }
+      - { name: OIDC_REALM_URL, valueFrom: { configMapKeyRef: { name: wba-config, key: OIDC_REALM_URL } } }
+    # O Kong grava a configuração renderizada em /tmp e precisa de escrita nos diretórios de prefixo.
+    writableTmp: true
+    probe:
+      exec: { command: ["kong", "health"] }
+  web:
+    enabled: true
+    public: true
+    image: web
+    port: 8080
+    replicas: 2
+    writableTmp: true
+    env:
+      - { name: GATEWAY_URL, value: "http://api-gateway:8000" }
+    probe:
+      httpGet: { path: /healthz, port: 8080 }
+  messaging-webhook:
+    enabled: true
+    image: messaging-gateway
+    port: 8080
+    replicas: 2
+    command: ["node", "--enable-source-maps", "dist/main-webhook.js"]
+    env:
+      - { name: PORT, value: "8080" }
+    probe:
+      httpGet: { path: /healthz, port: 8080 }
+  messaging-sender:
+    enabled: true
+    image: messaging-gateway
+    port: 8082
+    replicas: 2
+    command: ["node", "--enable-source-maps", "dist/main-sender.js"]
+    env:
+      - { name: PORT, value: "8082" }
+    probe:
+      httpGet: { path: /healthz, port: 8082 }
+  booking-agent:
+    enabled: true
+    image: booking-agent
+    port: 8081
+    replicas: 2
+    env:
+      - { name: PORT, value: "8081" }
+    probe:
+      httpGet: { path: /healthz, port: 8081 }
+  saas-mcp-server:
+    enabled: true
+    image: saas-mcp-server
+    port: 8090
+    replicas: 2
+    env:
+      - { name: HTTP_ADDR, value: ":8090" }
+    probe:
+      exec: { command: ["/saas-mcp-server", "healthcheck"] }
+  media-processor:
+    enabled: true
+    image: media-processor
+    port: 8083
+    replicas: 1
+    writableTmp: true
+    env:
+      - { name: PORT, value: "8083" }
+      - { name: GATEWAY_URL, value: "http://messaging-webhook:8080" }
+    probe:
+      httpGet: { path: /metrics, port: 8083 }
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { memory: 512Mi }

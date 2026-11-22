@@ -1,0 +1,26 @@
+{{- if .Values.ingress.enabled }}
+# Webhooks e API do painel entram pelo api-gateway (Kong); o painel estático pelo web. Em produção o ingress
+# pode ser o do gateway compartilhado do platform-edge, apontando para estes dois Services.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wba
+  labels:
+    {{- include "wba.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tlsSecretName }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - { path: /webhooks, pathType: Prefix, backend: { service: { name: api-gateway, port: { number: 8000 } } } }
+          - { path: /api, pathType: Prefix, backend: { service: { name: api-gateway, port: { number: 8000 } } } }
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 8080 } } } }
+{{- end }}
